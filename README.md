@@ -81,6 +81,7 @@ mkinitcpio -p linux
 ```
 
 ## GRUB
+```
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=arch_grub
 sed -i '/GRUB_CMDLINE_LINUX=/c\GRUB_CMDLINE_LINUX=cryptdevice=/dev/sda2' /etc/default/grub
-
+```
