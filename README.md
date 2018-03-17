@@ -19,7 +19,6 @@ git clone https://github.com/mperica/archlinux-install.git
 ```
 parted /dev/sda mkpart ESP fat32 1MiB 513MiB
 parted /dev/sda set 1 boot on
-mkfs.vfat -F32 /dev/sda1
 ```
 
 ### Create LVM partrition of the rest of disk space
@@ -39,10 +38,18 @@ lvcreate --size 8G vg0 --name swap
 lvcreate --size 30G vg0 --name root
 lvcreate -l +100%FREE vg0 --name home
 ```
+### Create filesystems
+```
+mkfs.vfat -F32 /dev/sda1
+mkswap /dev/mapper/vg0-swap
+mkfs.ext4 /dev/mapper/vg0-root
+mkfs.ext4 /dev/mapper/vg0-home
+```
 
 ## Mount partritions
 ```
 mount /dev/mapper/vg0-root /mnt
+mount /dev/mapper/vg0-home /mnt/home
 swapon /dev/mapper/vg0-swap
 mkdir /mnt/boot
 mount /dev/sda1 /mnt/boot
