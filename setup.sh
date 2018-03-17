@@ -23,6 +23,7 @@ parted /dev/sda mkpart ext4 513Mib 100%
 ## Setup encryption, dont forget uppercase `YES` to confirm
 echo "Time for encrypting your harddrive"
 cryptsetup -c aes-xts-plain64 -y --use-random luksFormat /dev/sda2
+echo "Enter password to unlock crypt volume"
 cryptsetup luksOpen /dev/sda2 crypt
 
 ### LVM Setup
@@ -59,6 +60,15 @@ mount /dev/mapper/vg0-home /mnt/home
 swapon /dev/mapper/vg0-swap
 mkdir /mnt/boot
 mount /dev/sda1 /mnt/boot
+
+echo "Checking for mountpoints"
+df -h
+echo "Do you want to continue? Y/n"
+read continue
+if [ $continue == "n" ];then
+  exit
+fi
+
 
 ### Install base system and some needed packages
 pacstrap /mnt base base-devel
