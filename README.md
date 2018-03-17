@@ -9,9 +9,7 @@ mount -o remount,size=2G /run/archiso/cowspace
 
 ## Git Setup
 ```
-git init
-git remote set-url origin https://github.com/mperica/archlinux-install.git
-git pull origin master
+git clone https://github.com/mperica/archlinux-install.git
 ```
 
 ## Partitions
