@@ -1,13 +1,14 @@
 # Archlinux install
 ### for peronal use only
 
-# Git Setup
+## Git Setup
+```
 git init
 git remote set-url origin https://github.com/mperica/archlinux-install.git
 git pull origin master
+```
 
-
-## Partritions
+## Partitions
 ### Create gpt partrition table
 `parted /dev/sda mklabel gpt`
 ### Create EFI bootable partrition
@@ -21,7 +22,7 @@ mkfs.vfat -F32 /dev/sda1
 `parted /dev/sda mkpart ext4 513Mib 100%`
 
 
-## Setup encryption, dont forget uppercase YES to confirm
+## Setup encryption, dont forget uppercase `YES` to confirm
 ```
 cryptsetup -c aes-xts-plain64 -y --use-random luksFormat /dev/sda2
 cryptsetup luksOpen /dev/sda2 lvm
@@ -79,7 +80,7 @@ mv mkinitcpio.conf.tmp /etc/mkinitcpio.conf
 mkinitcpio -p linux
 ```
 
-# GRUB
+## GRUB
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=arch_grub
 sed -i '/GRUB_CMDLINE_LINUX=/c\GRUB_CMDLINE_LINUX=cryptdevice=/dev/sda2' /etc/default/grub
 
