@@ -28,12 +28,12 @@ parted /dev/sda set 1 boot on
 ## Setup encryption, dont forget uppercase `YES` to confirm
 ```
 cryptsetup -c aes-xts-plain64 -y --use-random luksFormat /dev/sda2
-cryptsetup luksOpen /dev/sda2 lvm
+cryptsetup luksOpen /dev/sda2 crypt
 ```
 ### LVM Setup
 ```
-pvcreate /dev/mapper/lvm
-vgcreate vg0 /dev/mapper/lvm
+pvcreate /dev/mapper/crypt
+vgcreate vg0 /dev/mapper/crypt
 lvcreate --size 8G vg0 --name swap
 lvcreate --size 30G vg0 --name root
 lvcreate -l +100%FREE vg0 --name home
@@ -80,6 +80,7 @@ echo LANGUAGE=en_US >> /etc/locale.conf
 echo root:$ROOTPASSWORD | chpasswd
 useradd -m -g users -G wheel -s /bin/bash 
 echo $MYUSERNAME:MYPASSWORD | chpasswd
+gpasswd -a $MYUSERNAME wheel
 ```
 
 ## Initramfs
@@ -94,7 +95,7 @@ mkinitcpio -p linux
 ## Boot Loader
 ### GRUB
 ```
-grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=arch_grub
-sed -i '/GRUB_CMDLINE_LINUX=/c\GRUB_CMDLINE_LINUX="cryptdevice=/dev/sda2:luks:allow-discards"' /etc/default/grub
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=arch_grub
+sed -i '/GRUB_CMDLINE_LINUX=/c\GRUB_CMDLINE_LINUX="cryptdevice=/dev/sda2:crypt:allow-discards"' /etc/default/grub
 grub-mkconfig -o /boot/grub/grub.cfg
 ```
