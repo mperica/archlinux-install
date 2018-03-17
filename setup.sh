@@ -35,7 +35,7 @@ while [[ ! $swap =~ ^[0-9]+$ ]]; do
   echo "Enter numbers only"
   read swap
 done;
-lvcreate --size $swapG vg0 --name swap
+lvcreate --size ${swap}G vg0 --name swap
 echo "The size of swap is ${swap}GB"
 
 echo "Enter the size of your root partition in GB:"
@@ -43,7 +43,7 @@ while [[ ! $root =~ ^[0-9]+$ ]]; do
   echo "Enter numbers only"
   read root
 done;
-lvcreate --size $rootG vg0 --name root
+lvcreate --size ${root}G vg0 --name root
 echo "The size of root is ${root}GB"
 lvcreate -l +100%FREE vg0 --name home
 echo "The size of home is "`lsblk | grep /boot | awk '{print $4}'`
