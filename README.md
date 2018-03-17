@@ -1,6 +1,10 @@
 # Archlinux install
 ### for peronal use only
 
+### Archlinux live
+Increse size of cowspace to be able to install git on live system
+`mount -o remount,size=2G /run/archiso/cowspace`
+
 ## Git Setup
 ```
 git init
