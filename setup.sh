@@ -90,7 +90,6 @@ echo LANGUAGE=en_US >> /mnt/etc/locale.conf
 
 ## Users and passwords
 
-echo "Add root password"
 while true; do
 	read -p "Enter password for root account: " rootpass
 	echo "Do you want to change root password to ${rootpass}? (y/N):"
@@ -99,7 +98,7 @@ while true; do
 		n|no)
 			continue	;;
 		y|yes)	echo "Adding root password"
-			arch-chroot /mnt echo $root:rootpass | chpasswd
+			echo $root:rootpass | chpasswd -R /mnt
 			echo "Done."
 			break		;;
 	esac
@@ -116,7 +115,7 @@ while true; do
 			continue	;;
 		y|yes)	echo "Creating new user ${username}"
 			arch-chroot /mnt useradd -m -g users -G wheel -s /bin/bash $username
-			arch-chroot /mnt echo $username:userpass | chpasswd
+			echo $username:userpass | chpasswd -R /mnt
 			echo "Adding user ${username} wheel group"
 			arch-chroot /mnt gpasswd -a $username wheel
 			echo "%wheel ALL=(ALL) NOPASSWD: ALL" >> /mnt/etc/sudoers
@@ -139,11 +138,4 @@ arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot --bootlo
 sed -i '/GRUB_CMDLINE_LINUX=/c\GRUB_CMDLINE_LINUX="cryptdevice=/dev/sda2:crypt:allow-discards"' /mnt/etc/default/grub
 arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
 
-echo "The script is finished"
-echo "To reboot to yout new system enter exit and press [ENTER]: "
-read  exit
-if [[ $exit ]];then
-  echo "rebooting..."
-else
-  echo "exiting installer"
-fi
+read "The script has finished to reboot to yout new system press [ENTER]: "
