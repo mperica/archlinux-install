@@ -137,4 +137,5 @@ arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot --bootlo
 sed -i '/GRUB_CMDLINE_LINUX=/c\GRUB_CMDLINE_LINUX="cryptdevice=/dev/sda2:crypt:allow-discards"' /mnt/etc/default/grub
 arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
 
-read -p "The script has finished to reboot to yout new system press [ENTER]: "
+read -p "The script has finished to reboot to your new system press [ENTER]: "
+reboot
