@@ -22,7 +22,7 @@ parted /dev/sda mkpart ext4 513Mib 100% -s
 
 ## Setup encryption, dont forget uppercase `YES` to confirm
 echo "Time for encrypting your harddrive"
-cryptsetup -c aes-xts-plain64 -y --use-random luksFormat /dev/sda2
+cryptsetup -c aes-xts-plain64 -y --use-random luksFormat /dev/sda2 -q
 echo "Enter password to unlock crypt volume"
 cryptsetup luksOpen /dev/sda2 crypt
 
