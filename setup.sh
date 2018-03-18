@@ -56,10 +56,11 @@ mkfs.ext4 /dev/mapper/vg0-home
 
 ## Mount partritions
 mount /dev/mapper/vg0-root /mnt
+mkdir /mnt/boot
+mkdir /mnt/home
+mount /dev/sda1 /mnt/boot
 mount /dev/mapper/vg0-home /mnt/home
 swapon /dev/mapper/vg0-swap
-mkdir /mnt/boot
-mount /dev/sda1 /mnt/boot
 
 echo "Checking for mountpoints"
 df -h
