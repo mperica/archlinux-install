@@ -74,19 +74,19 @@ fi
 ### Install base system and some needed packages
 pacstrap /mnt base base-devel
 genfstab -pU /mnt >> /mnt/etc/fstab
-arch-chroot /mnt /bin/bash
-pacman -Sy vim git grub-efi-x86_64 efibootmgr wpa_supplicant dialog networkmanager --noconfirm
+#arch-chroot /mnt /bin/bash
+arch-chroot /mnt pacman -Sy vim git grub-efi-x86_64 efibootmgr wpa_supplicant dialog networkmanager --noconfirm
 
 ## Configure system
-systemctl enable NetworkManager.service
-ln -sf /usr/share/zoneinfo/Europe/Zagreb  /etc/localtime
-hwclock --systohc --utc
-echo archlinux > /etc/hostname
-cp /etc/locale.gen /etc/locale.gen.bak
-echo en_US.UTF-8 UTF-8 > etc/locale.gen
-locale-gen
-echo LANG=en_US.UTF-8 >> /etc/locale.conf
-echo LANGUAGE=en_US >> /etc/locale.conf
+arch-chroot /mnt systemctl enable NetworkManager.service
+ln -sf /usr/share/zoneinfo/Europe/Zagreb /mnt/etc/localtime
+arch-chroot /mnt hwclock --systohc --utc
+echo archlinux > /mnt/etc/hostname
+cp /etc/locale.gen /mnt/etc/locale.gen.bak
+echo en_US.UTF-8 UTF-8 > /mnt/etc/locale.gen
+arch-chroot /mnt locale-gen
+echo LANG=en_US.UTF-8 >> /mnt/etc/locale.conf
+echo LANGUAGE=en_US >> /mnt/etc/locale.conf
 
 ## Users and passwords
 
@@ -99,6 +99,7 @@ while true; do
 		n|no)
 			continue	;;
 		y|yes)	echo "Adding root password"
+			arch-chroot /mnt echo $root:rootpass | chpasswd
 			echo "Done."
 			break		;;
 	esac
@@ -114,11 +115,11 @@ while true; do
 		n|no)
 			continue	;;
 		y|yes)	echo "Creating new user ${username}"
-			useradd -m -g users -G wheel -s /bin/bash $username
-			echo $username:userpass | chpasswd
+			arch-chroot /mnt useradd -m -g users -G wheel -s /bin/bash $username
+			arch-chroot /mnt echo $username:userpass | chpasswd
 			echo "Adding user ${username} wheel group"
-			gpasswd -a $username wheel
-			echo "%wheel ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+			arch-chroot /mnt gpasswd -a $username wheel
+			echo "%wheel ALL=(ALL) NOPASSWD: ALL" >> /mnt/etc/sudoers
 			echo "Done."
 			break		;;
 	esac
@@ -126,17 +127,17 @@ done
 
 
 ### Initramfs
-sed '/^\s*#/d' /etc/mkinitcpio.conf > mkinitcpio.conf.tmp
+sed '/^\s*#/d' /mnt/etc/mkinitcpio.conf > mkinitcpio.conf.tmp
 sed -i '/MODULES=/c\MODULES=(ext4)' mkinitcpio.conf.tmp 
 sed -i '/HOOKS=/c\HOOKS=(base udev autodetect modconf block encrypt lvm2 filesystems keyboard fsck)' mkinitcpio.conf.tmp 
-mv mkinitcpio.conf.tmp /etc/mkinitcpio.conf
-mkinitcpio -p linux
+mv mkinitcpio.conf.tmp /mnt/etc/mkinitcpio.conf
+arch-chroot /mnt mkinitcpio -p linux
 
 ## Boot Loader
 ### GRUB
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=arch_grub
-sed -i '/GRUB_CMDLINE_LINUX=/c\GRUB_CMDLINE_LINUX="cryptdevice=/dev/sda2:crypt:allow-discards"' /etc/default/grub
-grub-mkconfig -o /boot/grub/grub.cfg
+arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=arch_grub
+sed -i '/GRUB_CMDLINE_LINUX=/c\GRUB_CMDLINE_LINUX="cryptdevice=/dev/sda2:crypt:allow-discards"' /mnt/etc/default/grub
+arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
 
 echo "The script is finished"
 echo "To reboot to yout new system enter exit and press [ENTER]: "
