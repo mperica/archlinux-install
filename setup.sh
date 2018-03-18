@@ -88,27 +88,41 @@ echo LANG=en_US.UTF-8 >> /etc/locale.conf
 echo LANGUAGE=en_US >> /etc/locale.conf
 
 ## Users and passwords
-while [[ -z $rootpass  ]]; do
-  echo "Enter password for root account"
-  read rootpass
-done;
-echo $rootpass
-echo root:$rootpass | chpasswd
-while [[ -z $user  ]]; do
-  echo "Enter the name of new user"
-  read user
-done;
-useradd -m -g users -G wheel -s /bin/bash $user
-while [[ -z $userpass  ]]; do
-  echo "Enter password for user ${user}"
-  read userpass
-done;
-echo $userpass
-echo $user:userpass | chpasswd
-echo "Creating user ${user} with password ${userpass}"
-gpasswd -a $user wheel
-echo "%wheel ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-echo "Added user ${user} to group wheel"
+
+echo "Add root password"
+while true; do
+	read -p "Enter password for root account: " rootpass
+	echo "Do you want to change root password to ${rootpass}? (y/N):"
+	read INPUT
+	case $INPUT in
+		n|no)
+			continue	;;
+		y|yes)	echo "Adding root password"
+			echo "Done."
+			break		;;
+	esac
+done
+
+echo "Creating user"
+while true; do
+	read -p "Enter username: " username
+	read -p "Enter password: " userpass
+	echo "Do you want to create user ${username} with password ${userpass}? (y/N):"
+	read INPUT
+	case $INPUT in
+		n|no)
+			continue	;;
+		y|yes)	echo "Creating new user ${username}"
+			useradd -m -g users -G wheel -s /bin/bash $username
+			echo $username:userpass | chpasswd
+			echo "Adding user ${username} wheel group"
+			gpasswd -a $username wheel
+			echo "%wheel ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+			echo "Done."
+			break		;;
+	esac
+done
+
 
 ### Initramfs
 sed '/^\s*#/d' /etc/mkinitcpio.conf > mkinitcpio.conf.tmp
