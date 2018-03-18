@@ -12,13 +12,13 @@
 
 ## Partitions
 ### Create gpt partrition table
-parted /dev/sda mklabel gpt
+parted /dev/sda mklabel gpt -s
 ## Create EFI bootable partrition
-parted /dev/sda mkpart ESP fat32 1MiB 513MiB
-parted /dev/sda set 1 boot on
+parted /dev/sda mkpart ESP fat32 1MiB 513MiB -s
+parted /dev/sda set 1 boot on -s
 
 ## Create LVM partrition of the rest of disk space
-parted /dev/sda mkpart ext4 513Mib 100%
+parted /dev/sda mkpart ext4 513Mib 100% -s
 
 ## Setup encryption, dont forget uppercase `YES` to confirm
 echo "Time for encrypting your harddrive"
