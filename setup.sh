@@ -98,7 +98,7 @@ while true; do
 		n|no)
 			continue	;;
 		y|yes)	echo "Adding root password"
-			echo $root:rootpass | chpasswd -R /mnt
+			echo "root:${rootpass}" | chpasswd -R /mnt
 			echo "Done."
 			break		;;
 	esac
@@ -115,7 +115,7 @@ while true; do
 			continue	;;
 		y|yes)	echo "Creating new user ${username}"
 			arch-chroot /mnt useradd -m -g users -G wheel -s /bin/bash $username
-			echo $username:userpass | chpasswd -R /mnt
+			echo "${username}:${userpass}" | chpasswd -R /mnt
 			echo "Adding user ${username} wheel group"
 			arch-chroot /mnt gpasswd -a $username wheel
 			echo "%wheel ALL=(ALL) NOPASSWD: ALL" >> /mnt/etc/sudoers
@@ -138,4 +138,4 @@ arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot --bootlo
 sed -i '/GRUB_CMDLINE_LINUX=/c\GRUB_CMDLINE_LINUX="cryptdevice=/dev/sda2:crypt:allow-discards"' /mnt/etc/default/grub
 arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
 
-read "The script has finished to reboot to yout new system press [ENTER]: "
+read -p "The script has finished to reboot to yout new system press [ENTER]: "
