@@ -191,6 +191,7 @@ diskmenu(){
   options+=("${SELECT_DISKFORMAT}" "")
   options+=("${SELECT_DISKMOUNT}" "")
   options+=("${SELECT_DONE}" "")
+}
 
   select=`"${APP}" \
 	  --backtitle "${BACKTITLE}" \
