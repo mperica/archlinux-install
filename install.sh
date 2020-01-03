@@ -1,11 +1,12 @@
 #!/usr/bin/env sh
 
 
-app="dialog"
+app_name="dialog"
 title="ArchLinux Install Script"
 menu_main="Main Menu"
 menu_disk="Disk Management"
-menu_install="Install Menu"
+menu_install="Install"
+menu_configure="Configure"
 select_exit="Exit"
 select_done="Done"
 select_disk="Select Disk"
@@ -13,7 +14,10 @@ select_disk_part="Create Partitions"
 select_disk_format="Format Partitions"
 select_disk_mount="Mount Disk"
 select_editor="Select Editor"
-select_install_base="Install Base System"
+select_install_base="Base System"
+select_install_bootloader="Boot Loader"
+select_install_kernel="Choose which kernel"
+select_configure_hostname="Set hostname"
 
 
 ## Functions ##
@@ -28,7 +32,7 @@ selecteditor(){
   options+=("nano" "")
 
   select=`"${app_name}" \
-	  --backtitle "title" \
+	  --backtitle "${title}" \
 	  --title "${select_editor}" \
 	  --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3`
   if [ "$?" = "0" ];then
@@ -49,7 +53,7 @@ selectdisk(){
   done
   IFS=$IFS_ORIG
 
-  result=`"${app_name}" --backtitle "title" --title "${select_disk}" \
+  result=`"${app_name}" --backtitle "${title}" --title "${select_disk}" \
       --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3`
   if [ "$?" != "0" ];then
     return 1
@@ -62,7 +66,7 @@ selectdisk(){
 
 partdisk(){
 	selectdisk
-	${app_name} --backtitle "title" --title "${select_disk_part}" \
+	${app_name} --backtitle "${title}" --title "${select_disk_part}" \
 			--defaultno --yesno "Selected device : ${install_disk}\n\nAll data will be erased ! \n\nContinue ?" 0 0
 	if [ "$?" = "0" ];then
 	  clear
@@ -93,7 +97,7 @@ cryptdisk(){
 }
 
 formatdisk(){
-	${app_name} --backtitle "title" --title "${select_disk_format} (btrfs)" \
+	${app_name} --backtitle "${title}" --title "${select_disk_format} (btrfs)" \
 	    --defaultno --yesno "Formating disk: ${install_disk}\n\n
 	    ${install_disk}1 fat32\n
 	    /dev/mapper/archlinux btrfs\n
@@ -132,13 +136,53 @@ mountdisk(){
 
 # =============INSTALL===============#
 installbase(){
-# Install the system, wifi and some tools
-  pacstrap /mnt base base-devel btrfs-progs snapper zsh htop \
-    net-tools wireless_tools wpa_supplicant dialog vim \
-    intel-ucode grub aria2 curl bash-completion
+  clear
+  pkgs="base base-devel btrfs-progs snapper zsh vim htop net-tools wireless_tools wpa_supplicant dialog bash-completion"
+  options=()
+  options+=("linux" "")
+  options+=("linux-lts" "")
+  options+=("linux-zen" "")
+  options+=("linux-hardened" "")
+  sel=$(${app_name} --backtitle "${title}" --title "Kernel" --menu "" 0 0 0 \
+    "${options[@]}" \
+    3>&1 1>&2 2>&3)
+  if [ "$?" = "0" ]; then
+    pkgs+=" ${sel}"
+  else
+    return 1
+  fi
+  echo "pacstrap /mnt ${pkgs}"
+  pacstrap /mnt ${pkgs}
+  pressanykey
+}
 
+installbootloader(){
+  clear
+  pkgs="grub-btrfs"
+  echo "pacstrap /mnt ${pkgs}"
+  pacstrap /mnt ${pkgs}
+  pressanykey
+}
+
+
+# ============CONFIGURE SYSTEM =============#
+configure_system(){
+  clear
 	# Generate fstab
+  echo "Generate Fstab"
 	genfstab -L -p /mnt >> /mnt/etc/fstab
+
+  pressanykey
+}
+
+configure_hostname(){
+  hostname=$(${app_name} --backtitle "${title}" --title "${menu_configure}" --inputbox "" 0 0 "archlinux" 3>&1 1>&2 2>&3)
+  if [ "$?" = "0" ]; then
+    clear
+    echo "echo \"${hostname}\" > /mnt/etc/hostname"
+    echo "${hostname}" > /mnt/etc/hostname
+    pressanykey
+  fi
 }
 
 ### MENUS ###
@@ -154,10 +198,11 @@ mainmenu(){
   options+=("${select_editor}" "")
   options+=("${menu_disk}" "")
   options+=("${menu_install}" "")
+  options+=("${menu_configure}" "")
   options+=("${select_exit}" "")
 
   select=`"${app_name}" \
-	  --backtitle "title" \
+	  --backtitle "${title}" \
 	  --title "${menu_main}" \
 	  --default-item "${nextitem}" \
 		--no-cancel \
@@ -175,6 +220,10 @@ mainmenu(){
       ;;
       "${menu_install}")
         installmenu
+				nextitem="${menu_configure}"
+      ;;
+      "${menu_configure}")
+        menu_configure
 				nextitem="${select_exit}"
       ;;
       "${select_exit}")
@@ -202,7 +251,7 @@ diskmenu(){
   options+=("${select_done}" "")
 
   select=`"${app_name}" \
-	  --backtitle "title" \
+	  --backtitle "${title}" \
 	  --title "${menu_disk}" \
 	  --default-item "${nextitem}" \
 	  --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3`
@@ -211,18 +260,18 @@ diskmenu(){
     case ${select} in
       "${select_disk_part}")
         partdisk
-	nextitem="${select_disk_format}"
+	      nextitem="${select_disk_format}"
       ;;
       "${select_disk_format}")
         formatdisk
-	nextitem="${select_disk_mount}"
+	      nextitem="${select_disk_mount}"
       ;;
       "${select_disk_mount}")
         mountdisk
-	nextitem="${select_done}"
+	      nextitem="${select_done}"
       ;;
       "${select_done}")
-	mainmenu
+	      mainmenu
       ;;
     esac
     diskmenu "${nextitem}"
@@ -239,11 +288,12 @@ installmenu(){
   fi
 
   options=()
-  options+=("${menu_install}" "")
+  options+=("${select_install_base}" "")
+  options+=("${select_install_bootloader}" "")
   options+=("${select_done}" "")
 
   select=`"${app_name}" \
-	  --backtitle "title" \
+	  --backtitle "${title}" \
 	  --title "${menu_install}" \
 	  --default-item "${nextitem}" \
 	  --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3`
@@ -252,13 +302,50 @@ installmenu(){
     case ${select} in
       "${select_install_base}")
         installbase
+        nextitem="${select_install_bootloader}"
+      ;;
+      "${select_install_bootloader}")
+        installbootloader
         nextitem="${select_done}"
       ;;
       "${select_done}")
-      mainmenu
+        mainmenu
       ;;
     esac
-    diskmenu "${nextitem}"
+    installmenu "${nextitem}"
+  else
+    clear
+  fi
+}
+
+menu_configure(){
+  if [ "${1}" == "" ];then
+    nextitem="."
+  else
+    nextitem="${1}"
+  fi
+
+  options=()
+  options+=("${select_configure_hostname}" "")
+  options+=("${select_done}" "")
+
+  select=`"${app_name}" \
+	  --backtitle "${title}" \
+	  --title "${menu_install}" \
+	  --default-item "${nextitem}" \
+	  --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3`
+
+  if [ "$?" == "0" ];then
+    case ${select} in
+      "${select_configure_hostname}")
+        configure_hostname
+        nextitem="${select_done}"
+      ;;
+      "${select_done}")
+        mainmenu
+      ;;
+    esac
+    menu_configure "${nextitem}"
   else
     clear
   fi
