@@ -14,8 +14,8 @@ select_disk_part="Create Partitions"
 select_disk_format="Format Partitions"
 select_disk_mount="Mount Disk"
 select_editor="Select Editor"
-select_install_base="Base System"
-select_install_bootloader="Boot Loader"
+select_install_base="Install Base System"
+select_install_bootloader="Install Boot Loader"
 select_install_kernel="Choose which kernel"
 select_configure_hostname="Set hostname"
 
@@ -39,12 +39,13 @@ selecteditor(){
     echo "Selected editor is ${select}"
     export EDITOR=${select}
     EDITOR=${select}
-    ${app_name} --msgbox "Selected Editor is ${select}" 5 30
+    ${app_name} --msgbox "Selected Editor is ${EDITOR}" 5 30
   fi
 }
 
 selectdisk(){
-  items=`lsblk -d -p -n -l -o NAME,SIZE -e 7,11`
+  #items=`lsblk -d -p -n -l -o NAME,SIZE -e 7,11`
+	items="/dev/sff 55Gb"
   options=()
   IFS_ORIG=$IFS
   IFS=$'\n'
@@ -60,67 +61,107 @@ selectdisk(){
   fi
 	echo ${result}
 	disk=$(echo ${result} | awk '{print $1}')
-	export install_disk="${disk}"
+	install_disk="${disk}"
+  #${app_name} --msgbox "Selected disk \n${INSTALL_DISK}" 0 0
   return 0
+}
+
+selectpartdisk(){
+  options=()
+  options+=("btrfs" "")
+  options+=("lvm" "")
+
+  select=`"${app_name}" \
+	  --backtitle "${title}" \
+	  --title "${select_editor}" \
+	  --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3`
+  if [ "$?" = "0" ];then
+    echo "Selected partition type ${select}"
+    partition_type=${select}
+    #${app_name} --msgbox "Selected partition type \n${PARTITION_TYPE}" 0 0
+  fi
+}
+
+swap(){
+	swapsize=$(cat /proc/meminfo | grep MemTotal | awk '{ print $2 }')
+	swapsize=$((${swapsize}/1000))"M"
+	echo "The size of swap is ${swap}M"
 }
 
 partdisk(){
 	selectdisk
+	selectpartdisk
 	${app_name} --backtitle "${title}" --title "${select_disk_part}" \
-			--defaultno --yesno "Selected device : ${install_disk}\n\nAll data will be erased ! \n\nContinue ?" 0 0
+				--defaultno --yesno "Disk ${install_disk} will be formated with ${partition_type}\nAll data will be erased !	Continue ?" 0 0
 	if [ "$?" = "0" ];then
 	  clear
-	  echo "Creating a new gpt table on ${install_disk}"
-	  parted -s ${install_disk} mklabel gpt
-	  echo "Creating boot EFI partition on ${install_disk}"
-	  parted -s ${install_disk} mkpart ESP fat32 1M 512M
-	  parted -s ${install_disk} set 1 boot on
-	  parted -s ${install_disk} name 1 BOOT
-	  echo "Creating root partition on ${install_disk}"
-	  parted -s ${install_disk} mkpart btrfs 513M 100%
-	  parted -s ${install_disk} name 2 ROOT
-	  pressanykey
-	  clear
-    echo
-	  echo "CRYPT SETUP\n"
-    echo
-    cryptdisk
+		$(echo ${partition_type})
+		pressanykey
 	else
 	  ${app_name} --msgbox "Disk modification canceled" 0 0
 	fi
 }
 
-cryptdisk(){
-	cryptsetup -q --type luks1 --cipher aes-xts-plain64 --hash sha512 \
-	    --use-random --verify-passphrase luksFormat ${install_disk}2
-	cryptsetup open ${install_disk}2 archlinux
+lvm(){
+	clear
+	echo "Creating a new gpt table on ${install_disk}"
+	parted -s ${install_disk} mklabel gpt
+	echo "Creating boot EFI partition on ${install_disk}"
+	parted -s ${install_disk} mkpart ESP fat32 1M 512M
+	parted -s ${install_disk} set 1 boot on
+	parted -s ${install_disk} name 1 EFI
+	echo "Creating root partition on ${install_disk}"
+  parted -s ${install_disk} mkpart LVM 513M 100%
+	pressanykey
+	cryptsetup
+	clear
+	### LVM Setup
+	pvcreate /dev/mapper/crypt
+	vgcreate vg0 /dev/mapper/crypt
+	lvcreate --size ${swap}M vg0 --name swap
+	lvcreate --size 30G vg0 --name root
+	lvcreate -l +100%FREE vg0 --name home
+	### Create filesystems
+	mkfs.vfat -F32 /dev/sda1
+	mkswap /dev/mapper/vg0-swap
+	mkfs.ext4 /dev/mapper/vg0-root
+	mkfs.ext4 /dev/mapper/vg0-home
+	## Mount partritions
+	mount /dev/mapper/vg0-root /mnt
+	mkdir /mnt/boot
+	mkdir /mnt/home
+	mount /dev/sda1 /mnt/boot
+	mount /dev/mapper/vg0-home /mnt/home
+	swapon /dev/mapper/vg0-swap
 }
 
-formatdisk(){
-	${app_name} --backtitle "${title}" --title "${select_disk_format} (btrfs)" \
-	    --defaultno --yesno "Formating disk: ${install_disk}\n\n
-	    ${install_disk}1 fat32\n
-	    /dev/mapper/archlinux btrfs\n
-	    \n\nContinue ?" 0 0
-
-	if [ "$?" = "0" ];then
-	    clear
-	    mkfs.vfat -F32 ${install_disk}1
-	    mkfs -t btrfs --force -L archlinux /dev/mapper/archlinux
-	    mount /dev/mapper/archlinux /mnt
-	    btrfs subvolume create /mnt/@
-	    btrfs subvolume set-default /mnt/@
-	    btrfs subvolume create /mnt/@home
-	    btrfs subvolume create /mnt/@cache
-	    btrfs subvolume create /mnt/@snapshots
-	    umount -R /mnt
-	    pressanykey
-	else
-	    ${app_name} --msgbox "Disk formating canceled" 0 0
-	fi
-}
-
-mountdisk(){
+btrfs(){
+  clear
+  echo "Creating a new gpt table on ${install_disk}"
+  parted -s ${install_disk} mklabel gpt
+  echo "Creating boot EFI partition on ${install_disk}"
+  parted -s ${install_disk} mkpart ESP fat32 1M 512M
+  parted -s ${install_disk} set 1 boot on
+  parted -s ${install_disk} name 1 BOOT
+  echo "Creating root partition on ${install_disk}"
+  parted -s ${install_disk} mkpart btrfs 513M 100%
+  parted -s ${install_disk} name 2 ROOT
+  pressanykey
+  clear
+  echo
+  echo "CRYPT SETUP\n"
+  echo
+  cryptdisk
+	mkfs.vfat -F32 ${install_disk}1
+	mkfs -t btrfs --force -L archlinux /dev/mapper/crypt
+	mount /dev/mapper/crypt /mnt
+	btrfs subvolume create /mnt/@
+	btrfs subvolume set-default /mnt/@
+	btrfs subvolume create /mnt/@home
+	btrfs subvolume create /mnt/@cache
+	btrfs subvolume create /mnt/@snapshots
+	umount -R /mnt
+	pressanykey
 	# Mount options
 	o=defaults,x-mount.mkdir
 	o_btrfs=$o,compress=lzo,ssd,noatime
@@ -134,10 +175,57 @@ mountdisk(){
 	pressanykey
 }
 
+cryptdisk(){
+	cryptsetup -q --type luks1 --cipher aes-xts-plain64 --hash sha512 \
+	    --use-random --verify-passphrase luksFormat ${install_disk}2
+	cryptsetup open ${install_disk}2 archlinux
+}
+
+#formatdisk(){
+#	${app_name} --backtitle "${title}" --title "${select_disk_format} (btrfs)" \
+#	    --defaultno --yesno "Formating disk: ${install_disk}\n\n
+#	    ${install_disk}1 fat32\n
+#	    /dev/mapper/archlinux btrfs\n
+#	    \n\nContinue ?" 0 0
+#
+#	if [ "$?" = "0" ];then
+#	    clear
+#	    mkfs.vfat -F32 ${install_disk}1
+#	    mkfs -t btrfs --force -L archlinux /dev/mapper/archlinux
+#	    mount /dev/mapper/archlinux /mnt
+#	    btrfs subvolume create /mnt/@
+#	    btrfs subvolume set-default /mnt/@
+#	    btrfs subvolume create /mnt/@home
+#	    btrfs subvolume create /mnt/@cache
+#	    btrfs subvolume create /mnt/@snapshots
+#	    umount -R /mnt
+#	    pressanykey
+#	else
+#	    ${app_name} --msgbox "Disk formating canceled" 0 0
+#	fi
+#}
+#
+#mountdisk(){
+#	# Mount options
+#	o=defaults,x-mount.mkdir
+#	o_btrfs=$o,compress=lzo,ssd,noatime
+#	clear
+#	mount -o compress=lzo,subvol=@,$o_btrfs /dev/mapper/archlinux /mnt
+#	mount -o compress=lzo,subvol=@home,$o_btrfs /dev/mapper/archlinux /mnt/home
+#	mount -o compress=lzo,subvol=@cache,$o_btrfs /dev/mapper/archlinux /mnt/var/cache
+#	mount -o compress=lzo,subvol=@snapshots,$o_btrfs /dev/mapper/archlinux /mnt/.snapshots
+#	mkdir -p /mnt/boot
+#	mount ${install_disk}1 /mnt/boot
+#	pressanykey
+#}
+
 # =============INSTALL===============#
 installbase(){
   clear
-  pkgs="base base-devel btrfs-progs snapper zsh vim htop net-tools wireless_tools wpa_supplicant dialog bash-completion"
+  pkgs="base vim net-tools wireless_tools wpa_supplicant dialog bash-completion terminus-font git "
+	if [ ${partition_type} = "btrfs"];then
+		pkgs+="btrfs-progs snapper"
+	fi
   options=()
   options+=("linux" "")
   options+=("linux-lts" "")
@@ -151,16 +239,27 @@ installbase(){
   else
     return 1
   fi
-  echo "pacstrap /mnt ${pkgs}"
+
   pacstrap /mnt ${pkgs}
+
+  ### Initramfs
+  sed '/^\s*#/d' /mnt/etc/mkinitcpio.conf > mkinitcpio.conf.tmp
+  sed -i '/MODULES=/c\MODULES=(ext4)' mkinitcpio.conf.tmp
+	sed -i '/HOOKS=/c\HOOKS=(base udev autodetect modconf block encrypt lvm2 filesystems btrfs keyboard fsck)' mkinitcpio.conf.tmp
+  mv mkinitcpio.conf.tmp /mnt/etc/mkinitcpio.conf
+  arch-chroot /mnt mkinitcpio -p linux
+
   pressanykey
 }
 
 installbootloader(){
   clear
-  pkgs="grub-btrfs"
+  pkgs="grub-btrfs efibootmgr"
   echo "pacstrap /mnt ${pkgs}"
   pacstrap /mnt ${pkgs}
+  arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=arch_grub
+  sed -i '/GRUB_CMDLINE_LINUX=/c\GRUB_CMDLINE_LINUX="cryptdevice=/dev/sda2:crypt:allow-discards"' /mnt/etc/default/grub
+  arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
   pressanykey
 }
 
@@ -170,7 +269,7 @@ configure_system(){
   clear
 	# Generate fstab
   echo "Generate Fstab"
-	genfstab -L -p /mnt >> /mnt/etc/fstab
+	genfstab -U -p /mnt >> /mnt/etc/fstab
 
   pressanykey
 }
@@ -246,8 +345,8 @@ diskmenu(){
 
   options=()
   options+=("${select_disk_part}" "")
-  options+=("${select_disk_format}" "")
-  options+=("${select_disk_mount}" "")
+#  options+=("${select_disk_format}" "")
+#  options+=("${select_disk_mount}" "")
   options+=("${select_done}" "")
 
   select=`"${app_name}" \
@@ -260,16 +359,17 @@ diskmenu(){
     case ${select} in
       "${select_disk_part}")
         partdisk
-	      nextitem="${select_disk_format}"
-      ;;
-      "${select_disk_format}")
-        formatdisk
-	      nextitem="${select_disk_mount}"
-      ;;
-      "${select_disk_mount}")
-        mountdisk
+#	      nextitem="${select_disk_format}"
 	      nextitem="${select_done}"
       ;;
+#      "${select_disk_format}")
+#        formatdisk
+#	      nextitem="${select_disk_mount}"
+#      ;;
+#      "${select_disk_mount}")
+#        mountdisk
+#	      nextitem="${select_done}"
+#      ;;
       "${select_done}")
 	      mainmenu
       ;;
