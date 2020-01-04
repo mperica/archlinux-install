@@ -14,6 +14,7 @@ select_disk_part="Create Partitions"
 select_disk_format="Format Partitions"
 select_disk_mount="Mount Disk"
 select_editor="Select Editor"
+select_mirror="Select Country"
 select_install_base="Install Base System"
 select_install_bootloader="Install Boot Loader"
 select_install_kernel="Choose which kernel"
@@ -78,8 +79,26 @@ selectpartdisk(){
   if [ "$?" = "0" ];then
     echo "Selected partition type ${select}"
     partition_type=${select}
-    #${app_name} --msgbox "Selected partition type \n${PARTITION_TYPE}" 0 0
   fi
+}
+
+selectmirror() {
+  if [[ ! -f /etc/pacman.d/mirrorlist.backup ]]; then
+    cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.backup
+  fi
+  items=$( sed -n "/^##.*/N; {s/^## \(.*\)\nServer.*/\1/p}" < /etc/pacman.d/mirrorlist.backup | sort -u )
+  options=()
+  IFS_ORIG=$IFS
+  IFS=$'\n'
+  for item in ${items}; do
+    options+=("${item}" "")
+  done
+  IFS=$IFS_ORIG
+  country=$(${app_name} --backtitle "${title}" --title "Country" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" != "0" ]; then
+    return 1
+  fi
+  sed "s/^\(Server .*\)/\#\1/;/^## $country/N; {s/^\(## .*\n\)\#Server \(.*\)/\1Server \2/}" < /etc/pacman.d/mirrorlist.backup > /etc/pacman.d/mirrorlist
 }
 
 swap(){
@@ -114,6 +133,7 @@ lvm(){
   parted -s ${install_disk} mkpart LVM 513M 100%
 	pressanykey
 	cryptdisk
+	pressanykey
 	clear
 	### LVM Setup
 	pvcreate /dev/mapper/crypt -ff -y
@@ -122,12 +142,16 @@ lvm(){
 	lvcreate --size ${swapsize} vg0 --name swap
 	lvcreate --size 30G vg0 --name root
 	lvcreate -l +100%FREE vg0 --name home
+	pressanykey
 	### Create filesystems
+	echo "Formating partitions"
 	mkfs.vfat -F32 /dev/sda1
 	mkswap /dev/mapper/vg0-swap
 	mkfs.ext4 /dev/mapper/vg0-root
 	mkfs.ext4 /dev/mapper/vg0-home
+	pressanykey
 	## Mount partritions
+	echo "Mounting partitions"
 	mount /dev/mapper/vg0-root /mnt
 	mkdir /mnt/boot
 	mkdir /mnt/home
@@ -226,6 +250,8 @@ installbase(){
   pkgs="base vim net-tools wireless_tools wpa_supplicant dialog bash-completion terminus-font git "
 	if [ ${partition_type} = "btrfs"];then
 		pkgs+="btrfs-progs snapper"
+	elif [ ${partition_type} = "lvm" ]
+		pkgs+="lvm2"
 	fi
   options=()
   options+=("linux" "")
@@ -242,11 +268,17 @@ installbase(){
   fi
 
   pacstrap /mnt ${pkgs}
+  pressanykey
 
   ### Initramfs
+	if [ ${partition_type} = "btrfs"];then
+		hooks="base udev autodetect modconf block encrypt filesystems btrfs keyboard fsck"
+	elif [ ${partition_type} = "lvm" ]
+		hooks="base udev autodetect modconf block encrypt lvm2 filesystems keyboard fsck"
+	fi
   sed '/^\s*#/d' /mnt/etc/mkinitcpio.conf > mkinitcpio.conf.tmp
-  sed -i '/MODULES=/c\MODULES=(ext4)' mkinitcpio.conf.tmp
-	sed -i '/HOOKS=/c\HOOKS=(base udev autodetect modconf block encrypt lvm2 filesystems btrfs keyboard fsck)' mkinitcpio.conf.tmp
+  #sed -i '/MODULES=/c\MODULES=(ext4)' mkinitcpio.conf.tmp
+	sed -i '/HOOKS=/c\HOOKS=(${hooks})' mkinitcpio.conf.tmp
   mv mkinitcpio.conf.tmp /mnt/etc/mkinitcpio.conf
   arch-chroot /mnt mkinitcpio -p linux
 
@@ -255,7 +287,11 @@ installbase(){
 
 installbootloader(){
   clear
-  pkgs="grub-btrfs efibootmgr"
+	if [ ${partition_type} = "btrfs"];then
+  	pkgs="grub-btrfs efibootmgr"
+	elif [ ${partition_type} = "lvm" ]
+  	pkgs="grub efibootmgr"
+	fi
   echo "pacstrap /mnt ${pkgs}"
   pacstrap /mnt ${pkgs}
   arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=arch_grub
@@ -271,7 +307,7 @@ configure_system(){
 	# Generate fstab
   echo "Generate Fstab"
 	genfstab -U -p /mnt >> /mnt/etc/fstab
-
+	cat /mnt/etc/fstab
   pressanykey
 }
 
@@ -428,6 +464,7 @@ menu_configure(){
 
   options=()
   options+=("${select_configure_hostname}" "")
+  options+=("${select_mirror}" "")
   options+=("${select_done}" "")
 
   select=`"${app_name}" \
@@ -440,6 +477,10 @@ menu_configure(){
     case ${select} in
       "${select_configure_hostname}")
         configure_hostname
+        nextitem="${select_mirror}"
+      ;;
+      "${select_mirror}")
+        selectmirror
         nextitem="${select_done}"
       ;;
       "${select_done}")
