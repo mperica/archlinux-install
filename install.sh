@@ -44,8 +44,8 @@ selecteditor(){
 }
 
 selectdisk(){
-  #items=`lsblk -d -p -n -l -o NAME,SIZE -e 7,11`
-	items="/dev/sff 55Gb"
+  items=`lsblk -d -p -n -l -o NAME,SIZE -e 7,11`
+	#items="/dev/sff 55Gb"
   options=()
   IFS_ORIG=$IFS
   IFS=$'\n'
@@ -113,7 +113,8 @@ lvm(){
 	echo "Creating root partition on ${install_disk}"
   parted -s ${install_disk} mkpart LVM 513M 100%
 	pressanykey
-	cryptsetup
+	cryptdisk
+	swap
 	clear
 	### LVM Setup
 	pvcreate /dev/mapper/crypt
@@ -178,7 +179,7 @@ btrfs(){
 cryptdisk(){
 	cryptsetup -q --type luks1 --cipher aes-xts-plain64 --hash sha512 \
 	    --use-random --verify-passphrase luksFormat ${install_disk}2
-	cryptsetup open ${install_disk}2 archlinux
+	cryptsetup open ${install_disk}2 crypt
 }
 
 #formatdisk(){
