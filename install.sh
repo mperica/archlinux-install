@@ -85,7 +85,7 @@ selectpartdisk(){
 swap(){
 	swapsize=$(cat /proc/meminfo | grep MemTotal | awk '{ print $2 }')
 	swapsize=$((${swapsize}/1000))"M"
-	echo "The size of swap is ${swap}M"
+	echo "The size of swap is ${swap}"
 }
 
 partdisk(){
@@ -114,12 +114,12 @@ lvm(){
   parted -s ${install_disk} mkpart LVM 513M 100%
 	pressanykey
 	cryptdisk
-	swap
 	clear
 	### LVM Setup
-	pvcreate /dev/mapper/crypt
+	pvcreate /dev/mapper/crypt -ff -y
 	vgcreate vg0 /dev/mapper/crypt
-	lvcreate --size ${swap}M vg0 --name swap
+	swap
+	lvcreate --size ${swapsize} vg0 --name swap
 	lvcreate --size 30G vg0 --name root
 	lvcreate -l +100%FREE vg0 --name home
 	### Create filesystems
