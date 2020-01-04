@@ -201,8 +201,10 @@ btrfs(){
 }
 
 cryptdisk(){
+	echo "Crypt Setup"
 	cryptsetup -q --type luks1 --cipher aes-xts-plain64 --hash sha512 \
 	    --use-random --verify-passphrase luksFormat ${install_disk}2
+	echo "Unlock Disk"
 	cryptsetup open ${install_disk}2 crypt
 }
 
@@ -247,12 +249,7 @@ cryptdisk(){
 # =============INSTALL===============#
 installbase(){
   clear
-  pkgs="base vim net-tools wireless_tools wpa_supplicant dialog bash-completion terminus-font git "
-	if [ ${partition_type} = "btrfs"];then
-		pkgs+="btrfs-progs snapper"
-	elif [ ${partition_type} = "lvm" ]
-		pkgs+="lvm2"
-	fi
+  pkgs="base btrfs-progs snapper lvm2  vim net-tools wireless_tools wpa_supplicant dialog bash-completion terminus-font git "
   options=()
   options+=("linux" "")
   options+=("linux-lts" "")
@@ -271,11 +268,7 @@ installbase(){
   pressanykey
 
   ### Initramfs
-	if [ ${partition_type} = "btrfs"];then
-		hooks="base udev autodetect modconf block encrypt filesystems btrfs keyboard fsck"
-	elif [ ${partition_type} = "lvm" ]
-		hooks="base udev autodetect modconf block encrypt lvm2 filesystems keyboard fsck"
-	fi
+	hooks="base udev autodetect modconf block encrypt lvm2 filesystems btrfs keyboard fsck"
   sed '/^\s*#/d' /mnt/etc/mkinitcpio.conf > mkinitcpio.conf.tmp
   #sed -i '/MODULES=/c\MODULES=(ext4)' mkinitcpio.conf.tmp
 	sed -i '/HOOKS=/c\HOOKS=(${hooks})' mkinitcpio.conf.tmp
@@ -287,10 +280,9 @@ installbase(){
 
 installbootloader(){
   clear
+  pkgs="grub efibootmgr "
 	if [ ${partition_type} = "btrfs"];then
-  	pkgs="grub-btrfs efibootmgr"
-	elif [ ${partition_type} = "lvm" ]
-  	pkgs="grub efibootmgr"
+  	pkgs+="grub-btrfs"
 	fi
   echo "pacstrap /mnt ${pkgs}"
   pacstrap /mnt ${pkgs}
