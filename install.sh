@@ -45,8 +45,8 @@ selecteditor(){
 }
 
 selectdisk(){
-  items=`lsblk -d -p -n -l -o NAME,SIZE -e 7,11`
-	#items="/dev/sff 55Gb"
+  #items=`lsblk -d -p -n -l -o NAME,SIZE -e 7,11`
+	items="/dev/sff 55Gb"
   options=()
   IFS_ORIG=$IFS
   IFS=$'\n'
@@ -167,16 +167,15 @@ btrfs(){
   echo "Creating boot EFI partition on ${install_disk}"
   parted -s ${install_disk} mkpart ESP fat32 1M 512M
   parted -s ${install_disk} set 1 boot on
-  parted -s ${install_disk} name 1 BOOT
+  #parted -s ${install_disk} name 1 BOOT
   echo "Creating root partition on ${install_disk}"
   parted -s ${install_disk} mkpart btrfs 513M 100%
-  parted -s ${install_disk} name 2 ROOT
+  #parted -s ${install_disk} name 2 ROOT
   pressanykey
-  clear
-  echo
-  echo "CRYPT SETUP\n"
-  echo
   cryptdisk
+	pressanykey
+	clear
+	### Create filesystems
 	mkfs.vfat -F32 ${install_disk}1
 	mkfs -t btrfs --force -L archlinux /dev/mapper/crypt
 	mount /dev/mapper/crypt /mnt
@@ -201,14 +200,13 @@ btrfs(){
 }
 
 cryptdisk(){
-	if [ ! -d /dev/mapper/crypt ];then
-		echo "Crypt Setup"
-		cryptsetup -q --type luks1 --cipher aes-xts-plain64 --hash sha512 \
-	    --use-random --verify-passphrase luksFormat ${install_disk}2
-	else
-		echo "Unlock Disk"
-		cryptsetup open ${install_disk}2 crypt
-	fi
+	echo "Crypt Setup"
+	echo
+	cryptsetup -q --type luks1 --cipher aes-xts-plain64 --hash sha512 \
+    --use-random --verify-passphrase luksFormat ${install_disk}2
+	echo "Unlock Disk"
+	echo
+	cryptsetup open ${install_disk}2 crypt
 }
 
 #formatdisk(){
@@ -330,6 +328,7 @@ mainmenu(){
 
   options=()
   options+=("${select_editor}" "")
+  options+=("${select_mirror}" "")
   options+=("${menu_disk}" "")
   options+=("${menu_install}" "")
   options+=("${menu_configure}" "")
@@ -346,7 +345,11 @@ mainmenu(){
     case ${select} in
       "${select_editor}")
         selecteditor
-				nextitem="${menu_disk}"
+				nextitem="${select_mirror}"
+      ;;
+      "${select_mirror}")
+        selectmirror
+        nextitem="${menu_disk}"
       ;;
       "${menu_disk}")
         diskmenu
@@ -462,7 +465,6 @@ menu_configure(){
 
   options=()
   options+=("${select_configure_hostname}" "")
-  options+=("${select_mirror}" "")
   options+=("${select_done}" "")
 
   select=`"${app_name}" \
@@ -475,10 +477,6 @@ menu_configure(){
     case ${select} in
       "${select_configure_hostname}")
         configure_hostname
-        nextitem="${select_mirror}"
-      ;;
-      "${select_mirror}")
-        selectmirror
         nextitem="${select_done}"
       ;;
       "${select_done}")
