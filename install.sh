@@ -201,11 +201,14 @@ btrfs(){
 }
 
 cryptdisk(){
-	echo "Crypt Setup"
-	cryptsetup -q --type luks1 --cipher aes-xts-plain64 --hash sha512 \
+	if [ ! -d /dev/mapper/crypt ];then
+		echo "Crypt Setup"
+		cryptsetup -q --type luks1 --cipher aes-xts-plain64 --hash sha512 \
 	    --use-random --verify-passphrase luksFormat ${install_disk}2
-	echo "Unlock Disk"
-	cryptsetup open ${install_disk}2 crypt
+	else
+		echo "Unlock Disk"
+		cryptsetup open ${install_disk}2 crypt
+	fi
 }
 
 #formatdisk(){
@@ -269,8 +272,11 @@ installbase(){
 
   ### Initramfs
 	hooks="base udev autodetect modconf block encrypt lvm2 filesystems btrfs keyboard fsck"
-  sed '/^\s*#/d' /mnt/etc/mkinitcpio.conf > mkinitcpio.conf.tmp
+  #sed '/^\s*#/d' /mnt/etc/mkinitcpio.conf > mkinitcpio.conf.tmp
   #sed -i '/MODULES=/c\MODULES=(ext4)' mkinitcpio.conf.tmp
+  cp -v /mnt/etc/mkinitcpio.conf /mnt/etc/mkinitcpio.conf.bak
+  cp -v /mnt/etc/mkinitcpio.conf mkinitcpio.conf.tmp
+  sed -i '/BINARIES=/c\BINARIES=(/usr/sbin/btrfs)' mkinitcpio.conf.tmp
 	sed -i '/HOOKS=/c\HOOKS=(${hooks})' mkinitcpio.conf.tmp
   mv mkinitcpio.conf.tmp /mnt/etc/mkinitcpio.conf
   arch-chroot /mnt mkinitcpio -p linux
