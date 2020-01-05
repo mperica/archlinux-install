@@ -114,14 +114,14 @@ partdisk(){
 				--defaultno --yesno "Disk ${install_disk} will be formated with ${partition_type}\nAll data will be erased !	Continue ?" 0 0
 	if [ "$?" = "0" ];then
 	  clear
-		$(echo ${partition_type})
+		setup$(echo ${partition_type})
 		pressanykey
 	else
 	  ${app_name} --msgbox "Disk modification canceled" 0 0
 	fi
 }
 
-lvm(){
+setuplvm(){
 	clear
 	echo "Creating a new gpt table on ${install_disk}"
 	parted -s ${install_disk} mklabel gpt
@@ -160,17 +160,17 @@ lvm(){
 	swapon /dev/mapper/vg0-swap
 }
 
-btrfs(){
+setupbtrfs(){
   clear
   echo "Creating a new gpt table on ${install_disk}"
   parted -s ${install_disk} mklabel gpt
   echo "Creating boot EFI partition on ${install_disk}"
   parted -s ${install_disk} mkpart ESP fat32 1M 512M
   parted -s ${install_disk} set 1 boot on
-  #parted -s ${install_disk} name 1 BOOT
+  parted -s ${install_disk} name 1 BOOT
   echo "Creating root partition on ${install_disk}"
   parted -s ${install_disk} mkpart btrfs 513M 100%
-  #parted -s ${install_disk} name 2 ROOT
+  parted -s ${install_disk} name 2 ROOT
   pressanykey
   cryptdisk
 	pressanykey
@@ -185,15 +185,13 @@ btrfs(){
 	btrfs subvolume create /mnt/@cache
 	btrfs subvolume create /mnt/@snapshots
 	umount -R /mnt
-	pressanykey
 	# Mount options
 	o=defaults,x-mount.mkdir
 	o_btrfs=$o,compress=lzo,ssd,noatime
-	clear
-	mount -o compress=lzo,subvol=@,$o_btrfs /dev/mapper/archlinux /mnt
-	mount -o compress=lzo,subvol=@home,$o_btrfs /dev/mapper/archlinux /mnt/home
-	mount -o compress=lzo,subvol=@cache,$o_btrfs /dev/mapper/archlinux /mnt/var/cache
-	mount -o compress=lzo,subvol=@snapshots,$o_btrfs /dev/mapper/archlinux /mnt/.snapshots
+	mount -o compress=lzo,subvol=@,$o_btrfs /dev/mapper/crypt /mnt
+	mount -o compress=lzo,subvol=@home,$o_btrfs /dev/mapper/crypt /mnt/home
+	mount -o compress=lzo,subvol=@cache,$o_btrfs /dev/mapper/crypt /mnt/var/cache
+	mount -o compress=lzo,subvol=@snapshots,$o_btrfs /dev/mapper/crypt /mnt/.snapshots
 	mkdir -p /mnt/boot
 	mount ${install_disk}1 /mnt/boot
 	pressanykey
@@ -209,48 +207,19 @@ cryptdisk(){
 	cryptsetup open ${install_disk}2 crypt
 }
 
-#formatdisk(){
-#	${app_name} --backtitle "${title}" --title "${select_disk_format} (btrfs)" \
-#	    --defaultno --yesno "Formating disk: ${install_disk}\n\n
-#	    ${install_disk}1 fat32\n
-#	    /dev/mapper/archlinux btrfs\n
-#	    \n\nContinue ?" 0 0
-#
-#	if [ "$?" = "0" ];then
-#	    clear
-#	    mkfs.vfat -F32 ${install_disk}1
-#	    mkfs -t btrfs --force -L archlinux /dev/mapper/archlinux
-#	    mount /dev/mapper/archlinux /mnt
-#	    btrfs subvolume create /mnt/@
-#	    btrfs subvolume set-default /mnt/@
-#	    btrfs subvolume create /mnt/@home
-#	    btrfs subvolume create /mnt/@cache
-#	    btrfs subvolume create /mnt/@snapshots
-#	    umount -R /mnt
-#	    pressanykey
-#	else
-#	    ${app_name} --msgbox "Disk formating canceled" 0 0
-#	fi
-#}
-#
-#mountdisk(){
-#	# Mount options
-#	o=defaults,x-mount.mkdir
-#	o_btrfs=$o,compress=lzo,ssd,noatime
-#	clear
-#	mount -o compress=lzo,subvol=@,$o_btrfs /dev/mapper/archlinux /mnt
-#	mount -o compress=lzo,subvol=@home,$o_btrfs /dev/mapper/archlinux /mnt/home
-#	mount -o compress=lzo,subvol=@cache,$o_btrfs /dev/mapper/archlinux /mnt/var/cache
-#	mount -o compress=lzo,subvol=@snapshots,$o_btrfs /dev/mapper/archlinux /mnt/.snapshots
-#	mkdir -p /mnt/boot
-#	mount ${install_disk}1 /mnt/boot
-#	pressanykey
-#}
 
 # =============INSTALL===============#
 installbase(){
   clear
-  pkgs="base btrfs-progs snapper lvm2  vim net-tools wireless_tools wpa_supplicant dialog bash-completion terminus-font git "
+  pkgs="base vim net-tools wireless_tools wpa_supplicant dialog bash-completion terminus-font git "
+	case $partition_type in
+		lvm)
+			pkgs+="lvm2"
+		;;
+		btrfs)
+			pkgs+="btrfs-progs snapper"
+		;;
+	esac
   options=()
   options+=("linux" "")
   options+=("linux-lts" "")
@@ -269,17 +238,22 @@ installbase(){
   pressanykey
 
   ### Initramfs
-	hooks="base udev autodetect modconf block encrypt lvm2 filesystems btrfs keyboard fsck"
-  #sed '/^\s*#/d' /mnt/etc/mkinitcpio.conf > mkinitcpio.conf.tmp
-  #sed -i '/MODULES=/c\MODULES=(ext4)' mkinitcpio.conf.tmp
   cp -v /mnt/etc/mkinitcpio.conf /mnt/etc/mkinitcpio.conf.bak
   cp -v /mnt/etc/mkinitcpio.conf mkinitcpio.conf.tmp
-  sed -i '/BINARIES=/c\BINARIES=(/usr/sbin/btrfs)' mkinitcpio.conf.tmp
-	sed -i '/HOOKS=/c\HOOKS=(${hooks})' mkinitcpio.conf.tmp
+	case $partition_type in
+		lvm)
+			sed -i '/HOOKS=/c\HOOKS=(base systemd sd-vconsole modconf keyboard block sd-lvm2 filesystems sd-encrypt fsck)' mkinitcpio.conf.tmp
+		;;
+		btrfs)
+  		sed -i '/BINARIES=/c\BINARIES=(/usr/sbin/btrfs)' mkinitcpio.conf.tmp
+			sed -i '/HOOKS=/c\HOOKS=(base systemd sd-vconsole modconf keyboard block filesystems btrfs sd-encrypt fsck)' mkinitcpio.conf.tmp
+		;;
+	esac
   mv mkinitcpio.conf.tmp /mnt/etc/mkinitcpio.conf
   arch-chroot /mnt mkinitcpio -p linux
 
   pressanykey
+	configure_system
 }
 
 installbootloader(){
@@ -305,17 +279,19 @@ configure_system(){
 	genfstab -U -p /mnt >> /mnt/etc/fstab
 	cat /mnt/etc/fstab
   pressanykey
+  echo "archlinux" > /mnt/etc/hostname
+  pressanykey
 }
 
-configure_hostname(){
-  hostname=$(${app_name} --backtitle "${title}" --title "${menu_configure}" --inputbox "" 0 0 "archlinux" 3>&1 1>&2 2>&3)
-  if [ "$?" = "0" ]; then
-    clear
-    echo "echo \"${hostname}\" > /mnt/etc/hostname"
-    echo "${hostname}" > /mnt/etc/hostname
-    pressanykey
-  fi
-}
+#configure_hostname(){
+#  hostname=$(${app_name} --backtitle "${title}" --title "${menu_configure}" --inputbox "" 0 0 "archlinux" 3>&1 1>&2 2>&3)
+#  if [ "$?" = "0" ]; then
+#    clear
+#    echo "echo \"${hostname}\" > /mnt/etc/hostname"
+#    echo "${hostname}" > /mnt/etc/hostname
+#    pressanykey
+#  fi
+#}
 
 ### MENUS ###
 
@@ -327,11 +303,9 @@ mainmenu(){
   fi
 
   options=()
-  options+=("${select_editor}" "")
-  options+=("${select_mirror}" "")
+  options+=("${menu_configure}" "")
   options+=("${menu_disk}" "")
   options+=("${menu_install}" "")
-  options+=("${menu_configure}" "")
   options+=("${select_exit}" "")
 
   select=`"${app_name}" \
@@ -343,14 +317,6 @@ mainmenu(){
 
   if [ "$?" == "0" ];then
     case ${select} in
-      "${select_editor}")
-        selecteditor
-				nextitem="${select_mirror}"
-      ;;
-      "${select_mirror}")
-        selectmirror
-        nextitem="${menu_disk}"
-      ;;
       "${menu_disk}")
         diskmenu
 				nextitem="${menu_install}"
@@ -397,17 +363,8 @@ diskmenu(){
     case ${select} in
       "${select_disk_part}")
         partdisk
-#	      nextitem="${select_disk_format}"
 	      nextitem="${select_done}"
       ;;
-#      "${select_disk_format}")
-#        formatdisk
-#	      nextitem="${select_disk_mount}"
-#      ;;
-#      "${select_disk_mount}")
-#        mountdisk
-#	      nextitem="${select_done}"
-#      ;;
       "${select_done}")
 	      mainmenu
       ;;
@@ -464,7 +421,8 @@ menu_configure(){
   fi
 
   options=()
-  options+=("${select_configure_hostname}" "")
+  options+=("${select_editor}" "")
+  options+=("${select_mirror}" "")
   options+=("${select_done}" "")
 
   select=`"${app_name}" \
@@ -475,8 +433,12 @@ menu_configure(){
 
   if [ "$?" == "0" ];then
     case ${select} in
-      "${select_configure_hostname}")
-        configure_hostname
+      "${select_editor}")
+        selecteditor
+				nextitem="${select_mirror}"
+      ;;
+      "${select_mirror}")
+        selectmirror
         nextitem="${select_done}"
       ;;
       "${select_done}")
