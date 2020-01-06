@@ -10,11 +10,11 @@ menu_configure="Configure"
 select_exit="Exit"
 select_done="Done"
 select_disk="Select Disk"
-select_disk_part="Create Partitions"
+select_disk_part="Format Disk"
 select_disk_format="Format Partitions"
 select_disk_mount="Mount Disk"
 #select_editor="Select Editor"
-select_mirror="Select Country"
+select_mirror="Select Mirror"
 select_install_base="Install Base System"
 select_install_bootloader="Install Boot Loader"
 select_install_kernel="Choose which kernel"
@@ -47,8 +47,8 @@ pressanykey(){
 #}
 
 selectdisk(){
-  #items=`lsblk -d -p -n -l -o NAME,SIZE -e 7,11`
-	items="/dev/sff 55Gb"
+  items=`lsblk -d -p -n -l -o NAME,SIZE -e 7,11`
+	#items="/dev/sff 55Gb"
   options=()
   IFS_ORIG=$IFS
   IFS=$'\n'
@@ -198,7 +198,7 @@ setupbtrfs(){
 	mount -o compress=zstd,subvol=@snapshots,$o_btrfs /dev/mapper/crypt /mnt/.snapshots
 	mkdir -p /mnt/boot
 	mount ${install_disk}1 /mnt/boot
-	pressanykey
+	#pressanykey
 }
 
 cryptdisk(){
@@ -217,7 +217,7 @@ cryptdisk(){
 # =============INSTALL===============#
 installbase(){
   clear
-  pkgs="base vim net-tools wireless_tools wpa_supplicant dialog bash-completion terminus-font git "
+  pkgs="base vim net-tools wireless_tools wpa_supplicant dialog bash-completion terminus-font git networkmanager "
 	case $partition_type in
 		lvm)
 			pkgs+="lvm2"
@@ -265,6 +265,10 @@ installbootloader(){
 
 # ============CONFIGURE SYSTEM =============#
 configure_system(){
+  # Enable Network Manager
+  clear
+  arch-chroot /mnt systemctl enable NetworkManager
+  pressanykey
 	# Generate fstab
   clear
   echo "Generate Fstab"
@@ -278,6 +282,21 @@ configure_system(){
   arch-chroot /mnt locale-gen
   echo LANG=en_US.UTF-8 >> /mnt/etc/locale.conf
   echo LANGUAGE=en_US >> /mnt/etc/locale.conf
+  pressanykey
+  ### Initramfs
+  cp -v /mnt/etc/mkinitcpio.conf /mnt/etc/mkinitcpio.conf.bak
+	case $partition_type in
+		lvm)
+			sed -i '/HOOKS=/c\HOOKS=(base udev autodetect modconf keyboard block lvm2 filesystems encrypt fsck)' mkinitcpio.conf.tmp
+		;;
+		btrfs)
+  		sed -i '/BINARIES=/c\BINARIES=(/usr/sbin/btrfs)' mkinitcpio.conf.tmp
+			sed -i '/HOOKS=/c\HOOKS=(base udev autodetect modconf keyboard block filesystems btrfs encrypt fsck)' mkinitcpio.conf.tmp
+		;;
+	esac
+  mv mkinitcpio.conf.tmp /mnt/etc/mkinitcpio.conf
+  arch-chroot /mnt mkinitcpio -p linux
+
   pressanykey
 }
 
@@ -333,23 +352,6 @@ configure_hostname(){
   fi
 }
 
-configure_initramfs(){
-  ### Initramfs
-  cp -v /mnt/etc/mkinitcpio.conf /mnt/etc/mkinitcpio.conf.bak
-	case $partition_type in
-		lvm)
-			sed -i '/HOOKS=/c\HOOKS=(base udev autodetect modconf keyboard block lvm2 filesystems encrypt fsck)' mkinitcpio.conf.tmp
-		;;
-		btrfs)
-  		sed -i '/BINARIES=/c\BINARIES=(/usr/sbin/btrfs)' mkinitcpio.conf.tmp
-			sed -i '/HOOKS=/c\HOOKS=(base udev autodetect modconf keyboard block filesystems btrfs encrypt fsck)' mkinitcpio.conf.tmp
-		;;
-	esac
-  mv mkinitcpio.conf.tmp /mnt/etc/mkinitcpio.conf
-  arch-chroot /mnt mkinitcpio -p linux
-
-  pressanykey
-}
 
 
 ### MENUS ###
@@ -362,7 +364,8 @@ mainmenu(){
   fi
 
   options=()
-  options+=("${menu_disk}" "")
+  options+=("${select_mirror}" "")
+  options+=("${select_disk_part}" "")
   options+=("${menu_install}" "")
   options+=("${menu_configure}" "")
   options+=("${select_exit}" "")
@@ -376,9 +379,17 @@ mainmenu(){
 
   if [ "$?" == "0" ];then
     case ${select} in
-      "${menu_disk}")
-        diskmenu
-				nextitem="${menu_install}"
+      #"${menu_disk}")
+      #  diskmenu
+			#	nextitem="${menu_install}"
+      #;;
+      "${select_mirror}")
+        selectmirror
+        nextitem="${select_done}"
+      ;;
+      "${select_disk_part}")
+        partdisk
+	      nextitem="${menu_install}"
       ;;
       "${menu_install}")
         installmenu
@@ -480,9 +491,9 @@ menu_configure(){
   fi
 
   options=()
+  options+=("${select_configure_hostname}" "")
   options+=("${select_settime}" "")
   #options+=("${select_editor}" "")
-  options+=("${select_mirror}" "")
   options+=("${select_done}" "")
 
   select=`"${app_name}" \
@@ -493,6 +504,10 @@ menu_configure(){
 
   if [ "$?" == "0" ];then
     case ${select} in
+      "${select_configure_hostname}")
+        configure_hostname
+				nextitem="${select_settime}"
+      ;;
       "${select_settime}")
         configure_time
 				nextitem="${select_mirror}"
@@ -501,10 +516,6 @@ menu_configure(){
  #       selecteditor
  # 			nextitem="${select_mirror}"
  #     ;;
-      "${select_mirror}")
-        selectmirror
-        nextitem="${select_done}"
-      ;;
       "${select_done}")
         mainmenu
       ;;
