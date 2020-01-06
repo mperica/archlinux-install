@@ -178,7 +178,6 @@ setupbtrfs(){
   parted -s ${install_disk} name 2 ROOT
   pressanykey
   cryptdisk
-	pressanykey
 	clear
 	### Create filesystems
 	mkfs.vfat -F32 ${install_disk}1
@@ -203,10 +202,12 @@ setupbtrfs(){
 }
 
 cryptdisk(){
+  clear
 	echo "Crypt Setup"
 	echo
 	cryptsetup -q --type luks1 --cipher aes-xts-plain64 --hash sha512 \
     --use-random --verify-passphrase luksFormat ${install_disk}2
+  clear
 	echo "Unlock Disk"
 	echo
 	cryptsetup open ${install_disk}2 crypt
@@ -271,6 +272,7 @@ configure_system(){
 	cat /mnt/etc/fstab
   pressanykey
   # Locale
+  clear
   cp /etc/locale.gen /mnt/etc/locale.gen.bak
   echo en_US.UTF-8 UTF-8 > /mnt/etc/locale.gen
   arch-chroot /mnt locale-gen
@@ -280,9 +282,6 @@ configure_system(){
 }
 
 configure_time(){
-clear
-echo "TIME"
-pressanykey
   items=$(ls -l /mnt/usr/share/zoneinfo/ | grep '^d' | gawk -F':[0-9]* ' '/:/{print $2}')
   options=()
   for item in ${items}; do
@@ -310,12 +309,10 @@ pressanykey
     return 1
   fi
 
-  clear
   echo "ln -sf /mnt/usr/share/zoneinfo/${timezone} /mnt/etc/localtime"
   ln -sf /usr/share/zoneinfo/${timezone} /mnt/etc/localtime
-  pressanykey
 
-  if (app_name --backtitle "${title}" --title "${select_settime}" --yesno "${select_timeutc}" 0 0) then
+  if (${app_name} --backtitle "${title}" --title "${select_settime}" --yesno "${select_timeutc}" 0 0) then
     clear
     arch-chroot /mnt hwclock --systohc --utc
   else
