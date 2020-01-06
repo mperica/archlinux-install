@@ -13,12 +13,14 @@ select_disk="Select Disk"
 select_disk_part="Create Partitions"
 select_disk_format="Format Partitions"
 select_disk_mount="Mount Disk"
-select_editor="Select Editor"
+#select_editor="Select Editor"
 select_mirror="Select Country"
 select_install_base="Install Base System"
 select_install_bootloader="Install Boot Loader"
 select_install_kernel="Choose which kernel"
 select_configure_hostname="Set hostname"
+select_settime="Set Time"
+select_timeutc="Set UTC"
 
 
 ## Functions ##
@@ -27,22 +29,22 @@ pressanykey(){
   read -n1 -p "Press any key to continue..."
 }
 
-selecteditor(){
-  options=()
-  options+=("vim" "")
-  options+=("nano" "")
-
-  select=`"${app_name}" \
-	  --backtitle "${title}" \
-	  --title "${select_editor}" \
-	  --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3`
-  if [ "$?" = "0" ];then
-    echo "Selected editor is ${select}"
-    export EDITOR=${select}
-    EDITOR=${select}
-    ${app_name} --msgbox "Selected Editor is ${EDITOR}" 5 30
-  fi
-}
+#selecteditor(){
+#  options=()
+#  options+=("vim" "")
+#  options+=("nano" "")
+#
+#  select=`"${app_name}" \
+#	  --backtitle "${title}" \
+#	  --title "${select_editor}" \
+#	  --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3`
+#  if [ "$?" = "0" ];then
+#    echo "Selected editor is ${select}"
+#    export EDITOR=${select}
+#    EDITOR=${select}
+#    ${app_name} --msgbox "Selected Editor is ${EDITOR}" 5 30
+#  fi
+#}
 
 selectdisk(){
   #items=`lsblk -d -p -n -l -o NAME,SIZE -e 7,11`
@@ -74,12 +76,15 @@ selectpartdisk(){
 
   select=`"${app_name}" \
 	  --backtitle "${title}" \
-	  --title "${select_editor}" \
+	  --title "${select_disk_part}" \
 	  --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3`
   if [ "$?" = "0" ];then
     echo "Selected partition type ${select}"
     partition_type=${select}
   fi
+#clear
+#echo "Setup is using $(echo ${partition_type})"
+#exit
 }
 
 selectmirror() {
@@ -187,11 +192,11 @@ setupbtrfs(){
 	umount -R /mnt
 	# Mount options
 	o=defaults,x-mount.mkdir
-	o_btrfs=$o,compress=lzo,ssd,noatime
-	mount -o compress=lzo,subvol=@,$o_btrfs /dev/mapper/crypt /mnt
-	mount -o compress=lzo,subvol=@home,$o_btrfs /dev/mapper/crypt /mnt/home
-	mount -o compress=lzo,subvol=@cache,$o_btrfs /dev/mapper/crypt /mnt/var/cache
-	mount -o compress=lzo,subvol=@snapshots,$o_btrfs /dev/mapper/crypt /mnt/.snapshots
+	o_btrfs=$o,compress=zstd,ssd,noatime
+	mount -o compress=zstd,subvol=@,$o_btrfs /dev/mapper/crypt /mnt
+	mount -o compress=zstd,subvol=@home,$o_btrfs /dev/mapper/crypt /mnt/home
+	mount -o compress=zstd,subvol=@cache,$o_btrfs /dev/mapper/crypt /mnt/var/cache
+	mount -o compress=zstd,subvol=@snapshots,$o_btrfs /dev/mapper/crypt /mnt/.snapshots
 	mkdir -p /mnt/boot
 	mount ${install_disk}1 /mnt/boot
 	pressanykey
@@ -237,31 +242,17 @@ installbase(){
   pacstrap /mnt ${pkgs}
   pressanykey
 
-  ### Initramfs
-  cp -v /mnt/etc/mkinitcpio.conf /mnt/etc/mkinitcpio.conf.bak
-  cp -v /mnt/etc/mkinitcpio.conf mkinitcpio.conf.tmp
-	case $partition_type in
-		lvm)
-			sed -i '/HOOKS=/c\HOOKS=(base systemd sd-vconsole modconf keyboard block sd-lvm2 filesystems sd-encrypt fsck)' mkinitcpio.conf.tmp
-		;;
-		btrfs)
-  		sed -i '/BINARIES=/c\BINARIES=(/usr/sbin/btrfs)' mkinitcpio.conf.tmp
-			sed -i '/HOOKS=/c\HOOKS=(base systemd sd-vconsole modconf keyboard block filesystems btrfs sd-encrypt fsck)' mkinitcpio.conf.tmp
-		;;
-	esac
-  mv mkinitcpio.conf.tmp /mnt/etc/mkinitcpio.conf
-  arch-chroot /mnt mkinitcpio -p linux
-
-  pressanykey
-	configure_system
+  configure_system
 }
 
 installbootloader(){
   clear
   pkgs="grub efibootmgr "
-	if [ ${partition_type} = "btrfs"];then
-  	pkgs+="grub-btrfs"
-	fi
+	case $partition_type in
+		btrfs)
+  	  pkgs+="grub-btrfs"
+		;;
+	esac
   echo "pacstrap /mnt ${pkgs}"
   pacstrap /mnt ${pkgs}
   arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=arch_grub
@@ -273,25 +264,96 @@ installbootloader(){
 
 # ============CONFIGURE SYSTEM =============#
 configure_system(){
-  clear
 	# Generate fstab
+  clear
   echo "Generate Fstab"
 	genfstab -U -p /mnt >> /mnt/etc/fstab
 	cat /mnt/etc/fstab
   pressanykey
-  echo "archlinux" > /mnt/etc/hostname
+  # Locale
+  cp /etc/locale.gen /mnt/etc/locale.gen.bak
+  echo en_US.UTF-8 UTF-8 > /mnt/etc/locale.gen
+  arch-chroot /mnt locale-gen
+  echo LANG=en_US.UTF-8 >> /mnt/etc/locale.conf
+  echo LANGUAGE=en_US >> /mnt/etc/locale.conf
   pressanykey
 }
 
-#configure_hostname(){
-#  hostname=$(${app_name} --backtitle "${title}" --title "${menu_configure}" --inputbox "" 0 0 "archlinux" 3>&1 1>&2 2>&3)
-#  if [ "$?" = "0" ]; then
-#    clear
-#    echo "echo \"${hostname}\" > /mnt/etc/hostname"
-#    echo "${hostname}" > /mnt/etc/hostname
-#    pressanykey
-#  fi
-#}
+configure_time(){
+clear
+echo "TIME"
+pressanykey
+  items=$(ls -l /mnt/usr/share/zoneinfo/ | grep '^d' | gawk -F':[0-9]* ' '/:/{print $2}')
+  options=()
+  for item in ${items}; do
+    options+=("${item}" "")
+  done
+
+  timezone=$(${app_name} --backtitle "${title}" --title "${select_settime}" --menu "" 0 0 0 \
+    "${options[@]}" \
+    3>&1 1>&2 2>&3)
+  if [ ! "$?" = "0" ]; then
+    return 1
+  fi
+
+
+  items=$(ls /mnt/usr/share/zoneinfo/${timezone}/)
+  options=()
+  for item in ${items}; do
+    options+=("${item}" "")
+  done
+
+  timezone=${timezone}/$(${app_name} --backtitle "${title}" --title "${select_settime}" --menu "" 0 0 0 \
+    "${options[@]}" \
+    3>&1 1>&2 2>&3)
+  if [ ! "$?" = "0" ]; then
+    return 1
+  fi
+
+  clear
+  echo "ln -sf /mnt/usr/share/zoneinfo/${timezone} /mnt/etc/localtime"
+  ln -sf /usr/share/zoneinfo/${timezone} /mnt/etc/localtime
+  pressanykey
+
+  if (app_name --backtitle "${title}" --title "${select_settime}" --yesno "${select_timeutc}" 0 0) then
+    clear
+    arch-chroot /mnt hwclock --systohc --utc
+  else
+    clear
+    arch-chroot /mnt hwclock --systohc --localtime
+  fi
+
+  pressanykey
+}
+
+configure_hostname(){
+  hostname=$(${app_name} --backtitle "${title}" --title "${select_configure_hostname}" --inputbox "" 0 0 "archlinux" 3>&1 1>&2 2>&3)
+  if [ "$?" = "0" ]; then
+    clear
+    echo "echo \"${hostname}\" > /mnt/etc/hostname"
+    echo "${hostname}" > /mnt/etc/hostname
+    pressanykey
+  fi
+}
+
+configure_initramfs(){
+  ### Initramfs
+  cp -v /mnt/etc/mkinitcpio.conf /mnt/etc/mkinitcpio.conf.bak
+	case $partition_type in
+		lvm)
+			sed -i '/HOOKS=/c\HOOKS=(base udev autodetect modconf keyboard block lvm2 filesystems encrypt fsck)' mkinitcpio.conf.tmp
+		;;
+		btrfs)
+  		sed -i '/BINARIES=/c\BINARIES=(/usr/sbin/btrfs)' mkinitcpio.conf.tmp
+			sed -i '/HOOKS=/c\HOOKS=(base udev autodetect modconf keyboard block filesystems btrfs encrypt fsck)' mkinitcpio.conf.tmp
+		;;
+	esac
+  mv mkinitcpio.conf.tmp /mnt/etc/mkinitcpio.conf
+  arch-chroot /mnt mkinitcpio -p linux
+
+  pressanykey
+}
+
 
 ### MENUS ###
 
@@ -303,9 +365,9 @@ mainmenu(){
   fi
 
   options=()
-  options+=("${menu_configure}" "")
   options+=("${menu_disk}" "")
   options+=("${menu_install}" "")
+  options+=("${menu_configure}" "")
   options+=("${select_exit}" "")
 
   select=`"${app_name}" \
@@ -421,7 +483,8 @@ menu_configure(){
   fi
 
   options=()
-  options+=("${select_editor}" "")
+  options+=("${select_settime}" "")
+  #options+=("${select_editor}" "")
   options+=("${select_mirror}" "")
   options+=("${select_done}" "")
 
@@ -433,10 +496,14 @@ menu_configure(){
 
   if [ "$?" == "0" ];then
     case ${select} in
-      "${select_editor}")
-        selecteditor
+      "${select_settime}")
+        configure_time
 				nextitem="${select_mirror}"
       ;;
+ #     "${select_editor}")
+ #       selecteditor
+ # 			nextitem="${select_mirror}"
+ #     ;;
       "${select_mirror}")
         selectmirror
         nextitem="${select_done}"
