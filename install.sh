@@ -72,7 +72,7 @@ selectdisk(){
 selectpartdisk(){
   options=()
   options+=("btrfs" "")
-  options+=("lvm" "")
+  options+=("ext4" "")
 
   select=`"${app_name}" \
 	  --backtitle "${title}" \
@@ -119,14 +119,15 @@ partdisk(){
 				--defaultno --yesno "Disk ${install_disk} will be formated with ${partition_type}\nAll data will be erased !	Continue ?" 0 0
 	if [ "$?" = "0" ];then
 	  clear
-		setup$(echo ${partition_type})
+		setup_lvm
+		setup_$(echo ${partition_type})
 		pressanykey
 	else
 	  ${app_name} --msgbox "Disk modification canceled" 0 0
 	fi
 }
 
-setuplvm(){
+setup_lvm(){
 	clear
 	echo "Creating a new gpt table on ${install_disk}"
 	parted -s ${install_disk} mklabel gpt
@@ -142,64 +143,89 @@ setuplvm(){
 	clear
 	### LVM Setup
 	pvcreate /dev/mapper/crypt -ff -y
-	vgcreate vg0 /dev/mapper/crypt
+	vgcreate lvm /dev/mapper/crypt
 	swap
-	lvcreate --size ${swapsize} vg0 --name swap
-	lvcreate --size 30G vg0 --name root
-	lvcreate -l +100%FREE vg0 --name home
+	lvcreate --size ${swapsize} lvm --name swap
+	lvcreate --size 30G lvm --name root
+	lvcreate -l +100%FREE lvm --name home
 	pressanykey
+}
+
+setup_ext4(){
 	### Create filesystems
 	echo "Formating partitions"
 	mkfs.vfat -F32 /dev/sda1
-	mkswap /dev/mapper/vg0-swap
-	mkfs.ext4 /dev/mapper/vg0-root
-	mkfs.ext4 /dev/mapper/vg0-home
+	mkswap /dev/mapper/lvm-swap
+	mkfs.ext4 /dev/mapper/lvm-root
+	mkfs.ext4 /dev/mapper/lvm-home
 	pressanykey
 	## Mount partritions
 	echo "Mounting partitions"
-	mount /dev/mapper/vg0-root /mnt
+	mount /dev/mapper/lvm-root /mnt
 	mkdir /mnt/boot
 	mkdir /mnt/home
 	mount /dev/sda1 /mnt/boot
-	mount /dev/mapper/vg0-home /mnt/home
-	swapon /dev/mapper/vg0-swap
+	mount /dev/mapper/lvm-home /mnt/home
+	swapon /dev/mapper/lvm-swap
 }
 
-setupbtrfs(){
-  clear
-  echo "Creating a new gpt table on ${install_disk}"
-  parted -s ${install_disk} mklabel gpt
-  echo "Creating boot EFI partition on ${install_disk}"
-  parted -s ${install_disk} mkpart ESP fat32 1M 512M
-  parted -s ${install_disk} set 1 boot on
-  parted -s ${install_disk} name 1 BOOT
-  echo "Creating root partition on ${install_disk}"
-  parted -s ${install_disk} mkpart btrfs 513M 100%
-  parted -s ${install_disk} name 2 ROOT
-  pressanykey
-  cryptdisk
-	clear
-	### Create filesystems
-	mkfs.vfat -F32 ${install_disk}1
-	mkfs -t btrfs --force -L archlinux /dev/mapper/crypt
-	mount /dev/mapper/crypt /mnt
+setup_btrfs(){
+	mkfs -t btrfs --force -L ROOT /dev/mapper/lvm-root
+	mkfs.xfs -L HOME /dev/mapper/lvm-home
+	mount /dev/mapper/lvm-root /mnt
 	btrfs subvolume create /mnt/@
 	btrfs subvolume set-default /mnt/@
-	btrfs subvolume create /mnt/@home
+	#btrfs subvolume create /mnt/@home
 	btrfs subvolume create /mnt/@cache
 	btrfs subvolume create /mnt/@snapshots
 	umount -R /mnt
 	# Mount options
 	o=defaults,x-mount.mkdir
 	o_btrfs=$o,compress=zstd,ssd,noatime
-	mount -o compress=zstd,subvol=@,$o_btrfs /dev/mapper/crypt /mnt
-	mount -o compress=zstd,subvol=@home,$o_btrfs /dev/mapper/crypt /mnt/home
-	mount -o compress=zstd,subvol=@cache,$o_btrfs /dev/mapper/crypt /mnt/var/cache
-	mount -o compress=zstd,subvol=@snapshots,$o_btrfs /dev/mapper/crypt /mnt/.snapshots
+	mount -o compress=zstd,subvol=@,$o_btrfs /dev/mapper/lvm-root /mnt
+	mount -o compress=zstd,subvol=@cache,$o_btrfs /dev/mapper/lvm-root /mnt/var/cache
+	mount -o compress=zstd,subvol=@snapshots,$o_btrfs /dev/mapper/lvm-root /mnt/.snapshots
+	mount -o compress=zstd /dev/mapper/lvm-home /mnt/home
 	mkdir -p /mnt/boot
 	mount ${install_disk}1 /mnt/boot
-	#pressanykey
+	pressanykey
 }
+
+#setupbtrfs(){
+#  clear
+#  echo "Creating a new gpt table on ${install_disk}"
+#  parted -s ${install_disk} mklabel gpt
+#  echo "Creating boot EFI partition on ${install_disk}"
+#  parted -s ${install_disk} mkpart ESP fat32 1M 512M
+#  parted -s ${install_disk} set 1 boot on
+#  parted -s ${install_disk} name 1 BOOT
+#  echo "Creating root partition on ${install_disk}"
+#  parted -s ${install_disk} mkpart btrfs 513M 100%
+#  parted -s ${install_disk} name 2 ROOT
+#  pressanykey
+#  cryptdisk
+#	clear
+#	### Create filesystems
+#	mkfs.vfat -F32 ${install_disk}1
+#	mkfs -t btrfs --force -L archlinux /dev/mapper/crypt
+#	mount /dev/mapper/crypt /mnt
+#	btrfs subvolume create /mnt/@
+#	btrfs subvolume set-default /mnt/@
+#	btrfs subvolume create /mnt/@home
+#	btrfs subvolume create /mnt/@cache
+#	btrfs subvolume create /mnt/@snapshots
+#	umount -R /mnt
+#	# Mount options
+#	o=defaults,x-mount.mkdir
+#	o_btrfs=$o,compress=zstd,ssd,noatime
+#	mount -o compress=zstd,subvol=@,$o_btrfs /dev/mapper/crypt /mnt
+#	mount -o compress=zstd,subvol=@home,$o_btrfs /dev/mapper/crypt /mnt/home
+#	mount -o compress=zstd,subvol=@cache,$o_btrfs /dev/mapper/crypt /mnt/var/cache
+#	mount -o compress=zstd,subvol=@snapshots,$o_btrfs /dev/mapper/crypt /mnt/.snapshots
+#	mkdir -p /mnt/boot
+#	mount ${install_disk}1 /mnt/boot
+#	#pressanykey
+#}
 
 cryptdisk(){
   clear
@@ -223,6 +249,8 @@ installbase(){
 			pkgs+="lvm2"
 		;;
 		btrfs)
+			umount /mnt/.snappshots
+			rm -rf /mnt/.snappshots
 			pkgs+="btrfs-progs snapper"
 		;;
 	esac
@@ -252,6 +280,7 @@ installbootloader(){
 	case $partition_type in
 		btrfs)
   	  pkgs+="grub-btrfs"
+			arch-chroot /mnt snapper -c root create-config /
 		;;
 	esac
   echo "pacstrap /mnt ${pkgs}"
@@ -287,14 +316,13 @@ configure_system(){
   cp -v /mnt/etc/mkinitcpio.conf /mnt/etc/mkinitcpio.conf.bak
 	case $partition_type in
 		lvm)
-			sed -i '/HOOKS=/c\HOOKS=(base udev autodetect modconf keyboard block lvm2 filesystems encrypt fsck)' mkinitcpio.conf.tmp
+			sed -i '/HOOKS=/c\HOOKS=(base udev autodetect modconf keyboard block lvm2 filesystems encrypt fsck)' /mnt/etc/mkinitcpio.conf
 		;;
 		btrfs)
-  		sed -i '/BINARIES=/c\BINARIES=(/usr/sbin/btrfs)' mkinitcpio.conf.tmp
-			sed -i '/HOOKS=/c\HOOKS=(base udev autodetect modconf keyboard block filesystems btrfs encrypt fsck)' mkinitcpio.conf.tmp
+  		sed -i '/BINARIES=/c\BINARIES=(/usr/sbin/btrfs)' /mnt/etc/mkinitcpio.conf
+			sed -i '/HOOKS=/c\HOOKS=(base udev autodetect modconf keyboard block filesystems btrfs encrypt fsck)' /mnt/etc/mkinitcpio.conf
 		;;
 	esac
-  mv mkinitcpio.conf.tmp /mnt/etc/mkinitcpio.conf
   arch-chroot /mnt mkinitcpio -p linux
 
   pressanykey
@@ -419,7 +447,7 @@ diskmenu(){
 
   options=()
   options+=("${select_disk_part}" "")
-#  options+=("${select_disk_format}" "")
+  options+=("${select_disk_format}" "")
 #  options+=("${select_disk_mount}" "")
   options+=("${select_done}" "")
 
