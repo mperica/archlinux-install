@@ -13,7 +13,8 @@ select_disk="Select Disk"
 select_disk_part="Format Disk"
 select_disk_format="Format Partitions"
 select_disk_mount="Mount Disk"
-#select_editor="Select Editor"
+select_editor="Select Editor"
+select_yay="Install Yay for AUR"
 select_mirror="Select Mirror"
 select_install_base="Install Base System"
 select_install_bootloader="Install Boot Loader"
@@ -318,6 +319,10 @@ configure_system(){
   		sed -i '/BINARIES=/c\BINARIES=(/usr/sbin/btrfs)' /mnt/etc/mkinitcpio.conf
 			sed -i '/HOOKS=/c\HOOKS=(base udev autodetect modconf keyboard block filesystems btrfs encrypt fsck)' /mnt/etc/mkinitcpio.conf
 		;;
+		btrfs_root)
+  		sed -i '/BINARIES=/c\BINARIES=(/usr/sbin/btrfs)' /mnt/etc/mkinitcpio.conf
+			sed -i '/HOOKS=/c\HOOKS=(base udev autodetect modconf keyboard block filesystems btrfs encrypt fsck)' /mnt/etc/mkinitcpio.conf
+		;;
 	esac
   arch-chroot /mnt mkinitcpio -p linux
 
@@ -374,6 +379,13 @@ configure_hostname(){
     echo "${hostname}" > /mnt/etc/hostname
     pressanykey
   fi
+}
+
+install_yay(){
+	clear
+	git clone https://aur.archlinux.org/yay.git /mnt/tmp
+	arch-chroot /mnt makepkg -si /mnt/tmp/yay
+	pressanykey
 }
 
 
@@ -517,7 +529,8 @@ menu_configure(){
   options=()
   options+=("${select_configure_hostname}" "")
   options+=("${select_settime}" "")
-  #options+=("${select_editor}" "")
+  options+=("${select_editor}" "")
+  options+=("${select_yay}" "")
   options+=("${select_done}" "")
 
   select=`"${app_name}" \
@@ -536,10 +549,14 @@ menu_configure(){
         configure_time
 				nextitem="${select_mirror}"
       ;;
- #     "${select_editor}")
- #       selecteditor
- # 			nextitem="${select_mirror}"
- #     ;;
+      "${select_editor}")
+        selecteditor
+  			nextitem="${select_yay}"
+      ;;
+      "${select_yay}")
+        install_yay
+  			nextitem="${select_done}"
+      ;;
       "${select_done}")
         mainmenu
       ;;
