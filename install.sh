@@ -14,7 +14,7 @@ select_disk_part="Format Disk"
 select_disk_format="Format Partitions"
 select_disk_mount="Mount Disk"
 select_editor="Select Editor"
-select_yay="Install Yay for AUR"
+select_yay="Install Yay AUR"
 select_mirror="Select Mirror"
 select_install_base="Install Base System"
 select_install_bootloader="Install Boot Loader"
@@ -73,9 +73,9 @@ selectdisk(){
 
 selectpartdisk(){
   options=()
-  options+=("btrfs" "")
-  options+=("btrfs_root" "")
-  options+=("ext4" "")
+  options+=("btrfs" "Btrfs on /dev/mapper/crypt")
+  options+=("btrfs-root" "Btrfs on lvm_root, ext4 on lvm_home")
+  options+=("ext4" "ext4 on lvm_root and lvm_home")
 
   select=`"${app_name}" \
 	  --backtitle "${title}" \
@@ -119,7 +119,6 @@ partdisk(){
 				--defaultno --yesno "Disk ${install_disk} will be formated with ${partition_type}\nAll data will be erased !	Continue ?" 0 0
 	if [ "$?" = "0" ];then
 	  clear
-		setup_lvm
 		setup_$(echo ${partition_type})
 		pressanykey
 	else
@@ -146,7 +145,6 @@ setup_lvm(){
 	echo "Creating boot EFI partition on ${install_disk}"
 	parted -s ${install_disk} mkpart ESP fat32 1M 512M
 	parted -s ${install_disk} set 1 boot on
-	parted -s ${install_disk} name 1 EFI
 	echo "Creating root partition on ${install_disk}"
   parted -s ${install_disk} mkpart LVM 513M 100%
 	pressanykey
@@ -164,6 +162,7 @@ setup_lvm(){
 }
 
 setup_ext4(){
+	setup_lvm
 	### Create filesystems
 	echo "Formating partitions"
 	mkfs.vfat -F32 /dev/sda1
@@ -182,9 +181,8 @@ setup_ext4(){
 }
 
 setup_btrfs(){
-	mkfs -t btrfs --force -L ROOT /dev/mapper/lvm-root
-	mkswap -L SWAP /dev/mapper/lvm-swap
-	mount /dev/mapper/lvm-root /mnt
+	mkfs -t btrfs --force -L ROOT /dev/mapper/crypt
+	mount /dev/mapper/crypt /mnt
 	btrfs subvolume create /mnt/@
 	btrfs subvolume set-default /mnt/@
 	btrfs subvolume create /mnt/@home
@@ -194,17 +192,17 @@ setup_btrfs(){
 	# Mount options
 	o=defaults,x-mount.mkdir
 	o_btrfs=$o,compress=zstd,ssd,noatime
-	mount -o compress=zstd,subvol=@,$o_btrfs /dev/mapper/lvm-root /mnt
-	mount -o compress=zstd,subvol=@cache,$o_btrfs /dev/mapper/lvm-root /mnt/var/cache
-	mount -o compress=zstd,subvol=@snapshots,$o_btrfs /dev/mapper/lvm-root /mnt/.snapshots
-	mount -o compress=zstd /dev/mapper/lvm-home /mnt/home
+	mount -o compress=zstd,subvol=@,$o_btrfs /dev/mapper/crypt /mnt
+	mount -o compress=zstd,subvol=@cache,$o_btrfs /dev/mapper/crypt /mnt/var/cache
+	mount -o compress=zstd,subvol=@snapshots,$o_btrfs /dev/mapper/crypt /mnt/.snapshots
+	mount -o compress=zstd,subvol=@home,$o_btrfs /dev/mapper/crypt /mnt/home
 	mkdir -p /mnt/boot
 	mount ${install_disk}1 /mnt/boot
-	swapon /dev/mapper/lvm-swap
 	pressanykey
 }
 
 setup_btrfs_root(){
+	setup_lvm
 	mkfs -t btrfs --force -L ROOT /dev/mapper/lvm-root
 	mkfs.ext4 -L HOME /dev/mapper/lvm-home
 	mkswap -L SWAP /dev/mapper/lvm-swap
