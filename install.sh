@@ -29,22 +29,23 @@ pressanykey(){
   read -n1 -p "Press any key to continue..."
 }
 
-#selecteditor(){
-#  options=()
-#  options+=("vim" "")
-#  options+=("nano" "")
-#
-#  select=`"${app_name}" \
-#	  --backtitle "${title}" \
-#	  --title "${select_editor}" \
-#	  --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3`
-#  if [ "$?" = "0" ];then
-#    echo "Selected editor is ${select}"
-#    export EDITOR=${select}
-#    EDITOR=${select}
-#    ${app_name} --msgbox "Selected Editor is ${EDITOR}" 5 30
-#  fi
-#}
+selecteditor(){
+  options=()
+  options+=("vim" "")
+  options+=("nano" "")
+
+  select=`"${app_name}" \
+	  --backtitle "${title}" \
+	  --title "${select_editor}" \
+	  --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3`
+  if [ "$?" = "0" ];then
+    echo "Selected editor is ${select}"
+    export EDITOR=${select}
+		echo "export EDITOR=${select}" >> /mnt/etc/profile
+    EDITOR=${select}
+    ${app_name} --msgbox "Selected Editor is ${EDITOR}" 5 30
+  fi
+}
 
 selectdisk(){
   items=`lsblk -d -p -n -l -o NAME,SIZE -e 7,11`
@@ -72,6 +73,7 @@ selectdisk(){
 selectpartdisk(){
   options=()
   options+=("btrfs" "")
+  options+=("btrfs-root" "")
   options+=("ext4" "")
 
   select=`"${app_name}" \
@@ -82,9 +84,6 @@ selectpartdisk(){
     echo "Selected partition type ${select}"
     partition_type=${select}
   fi
-#clear
-#echo "Setup is using $(echo ${partition_type})"
-#exit
 }
 
 selectmirror() {
@@ -125,6 +124,18 @@ partdisk(){
 	else
 	  ${app_name} --msgbox "Disk modification canceled" 0 0
 	fi
+}
+
+cryptdisk(){
+  clear
+	echo "Crypt Setup"
+	echo
+	cryptsetup -q --type luks1 --cipher aes-xts-plain64 --hash sha512 \
+    --use-random --verify-passphrase luksFormat ${install_disk}2
+  clear
+	echo "Unlock Disk"
+	echo
+	cryptsetup open ${install_disk}2 crypt
 }
 
 setup_lvm(){
@@ -171,11 +182,10 @@ setup_ext4(){
 
 setup_btrfs(){
 	mkfs -t btrfs --force -L ROOT /dev/mapper/lvm-root
-	mkfs.xfs -L HOME /dev/mapper/lvm-home
 	mount /dev/mapper/lvm-root /mnt
 	btrfs subvolume create /mnt/@
 	btrfs subvolume set-default /mnt/@
-	#btrfs subvolume create /mnt/@home
+	btrfs subvolume create /mnt/@home
 	btrfs subvolume create /mnt/@cache
 	btrfs subvolume create /mnt/@snapshots
 	umount -R /mnt
@@ -191,53 +201,27 @@ setup_btrfs(){
 	pressanykey
 }
 
-#setupbtrfs(){
-#  clear
-#  echo "Creating a new gpt table on ${install_disk}"
-#  parted -s ${install_disk} mklabel gpt
-#  echo "Creating boot EFI partition on ${install_disk}"
-#  parted -s ${install_disk} mkpart ESP fat32 1M 512M
-#  parted -s ${install_disk} set 1 boot on
-#  parted -s ${install_disk} name 1 BOOT
-#  echo "Creating root partition on ${install_disk}"
-#  parted -s ${install_disk} mkpart btrfs 513M 100%
-#  parted -s ${install_disk} name 2 ROOT
-#  pressanykey
-#  cryptdisk
-#	clear
-#	### Create filesystems
-#	mkfs.vfat -F32 ${install_disk}1
-#	mkfs -t btrfs --force -L archlinux /dev/mapper/crypt
-#	mount /dev/mapper/crypt /mnt
-#	btrfs subvolume create /mnt/@
-#	btrfs subvolume set-default /mnt/@
-#	btrfs subvolume create /mnt/@home
-#	btrfs subvolume create /mnt/@cache
-#	btrfs subvolume create /mnt/@snapshots
-#	umount -R /mnt
-#	# Mount options
-#	o=defaults,x-mount.mkdir
-#	o_btrfs=$o,compress=zstd,ssd,noatime
-#	mount -o compress=zstd,subvol=@,$o_btrfs /dev/mapper/crypt /mnt
-#	mount -o compress=zstd,subvol=@home,$o_btrfs /dev/mapper/crypt /mnt/home
-#	mount -o compress=zstd,subvol=@cache,$o_btrfs /dev/mapper/crypt /mnt/var/cache
-#	mount -o compress=zstd,subvol=@snapshots,$o_btrfs /dev/mapper/crypt /mnt/.snapshots
-#	mkdir -p /mnt/boot
-#	mount ${install_disk}1 /mnt/boot
-#	#pressanykey
-#}
-
-cryptdisk(){
-  clear
-	echo "Crypt Setup"
-	echo
-	cryptsetup -q --type luks1 --cipher aes-xts-plain64 --hash sha512 \
-    --use-random --verify-passphrase luksFormat ${install_disk}2
-  clear
-	echo "Unlock Disk"
-	echo
-	cryptsetup open ${install_disk}2 crypt
+setup_btrfs-root(){
+	mkfs -t btrfs --force -L ROOT /dev/mapper/lvm-root
+	mkfs.ext4 -L HOME /dev/mapper/lvm-home
+	mount /dev/mapper/lvm-root /mnt
+	btrfs subvolume create /mnt/@
+	btrfs subvolume set-default /mnt/@
+	btrfs subvolume create /mnt/@cache
+	btrfs subvolume create /mnt/@snapshots
+	umount -R /mnt
+	# Mount options
+	o=defaults,x-mount.mkdir
+	o_btrfs=$o,compress=zstd,ssd,noatime
+	mount -o compress=zstd,subvol=@,$o_btrfs /dev/mapper/lvm-root /mnt
+	mount -o compress=zstd,subvol=@cache,$o_btrfs /dev/mapper/lvm-root /mnt/var/cache
+	mount -o compress=zstd,subvol=@snapshots,$o_btrfs /dev/mapper/lvm-root /mnt/.snapshots
+	mount -o compress=zstd /dev/mapper/lvm-home /mnt/home
+	mkdir -p /mnt/boot
+	mount ${install_disk}1 /mnt/boot
+	pressanykey
 }
+
 
 
 # =============INSTALL===============#
