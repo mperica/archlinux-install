@@ -73,7 +73,7 @@ selectdisk(){
 selectpartdisk(){
   options=()
   options+=("btrfs" "")
-  options+=("btrfs-root" "")
+  options+=("btrfs_root" "")
   options+=("ext4" "")
 
   select=`"${app_name}" \
@@ -166,7 +166,7 @@ setup_ext4(){
 	### Create filesystems
 	echo "Formating partitions"
 	mkfs.vfat -F32 /dev/sda1
-	mkswap /dev/mapper/lvm-swap
+	mkswap -L SWAP /dev/mapper/lvm-swap
 	mkfs.ext4 /dev/mapper/lvm-root
 	mkfs.ext4 /dev/mapper/lvm-home
 	pressanykey
@@ -182,6 +182,7 @@ setup_ext4(){
 
 setup_btrfs(){
 	mkfs -t btrfs --force -L ROOT /dev/mapper/lvm-root
+	mkswap -L SWAP /dev/mapper/lvm-swap
 	mount /dev/mapper/lvm-root /mnt
 	btrfs subvolume create /mnt/@
 	btrfs subvolume set-default /mnt/@
@@ -198,12 +199,14 @@ setup_btrfs(){
 	mount -o compress=zstd /dev/mapper/lvm-home /mnt/home
 	mkdir -p /mnt/boot
 	mount ${install_disk}1 /mnt/boot
+	swapon /dev/mapper/lvm-swap
 	pressanykey
 }
 
-setup_btrfs-root(){
+setup_btrfs_root(){
 	mkfs -t btrfs --force -L ROOT /dev/mapper/lvm-root
 	mkfs.ext4 -L HOME /dev/mapper/lvm-home
+	mkswap -L SWAP /dev/mapper/lvm-swap
 	mount /dev/mapper/lvm-root /mnt
 	btrfs subvolume create /mnt/@
 	btrfs subvolume set-default /mnt/@
@@ -216,9 +219,11 @@ setup_btrfs-root(){
 	mount -o compress=zstd,subvol=@,$o_btrfs /dev/mapper/lvm-root /mnt
 	mount -o compress=zstd,subvol=@cache,$o_btrfs /dev/mapper/lvm-root /mnt/var/cache
 	mount -o compress=zstd,subvol=@snapshots,$o_btrfs /dev/mapper/lvm-root /mnt/.snapshots
-	mount -o compress=zstd /dev/mapper/lvm-home /mnt/home
+	mkdir -p /mnt/home
+	mount /dev/mapper/lvm-home /mnt/home
 	mkdir -p /mnt/boot
 	mount ${install_disk}1 /mnt/boot
+	swapon /dev/mapper/lvm-swap
 	pressanykey
 }
 
@@ -235,6 +240,9 @@ installbase(){
 		btrfs)
 			umount /mnt/.snappshots
 			rm -rf /mnt/.snappshots
+			pkgs+="btrfs-progs snapper"
+		;;
+		btrfs_root)
 			pkgs+="btrfs-progs snapper"
 		;;
 	esac
@@ -263,6 +271,10 @@ installbootloader(){
   pkgs="grub efibootmgr "
 	case $partition_type in
 		btrfs)
+  	  pkgs+="grub-btrfs"
+			arch-chroot /mnt snapper -c root create-config /
+		;;
+		btrfs_root)
   	  pkgs+="grub-btrfs"
 			arch-chroot /mnt snapper -c root create-config /
 		;;
