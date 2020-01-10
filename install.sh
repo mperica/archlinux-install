@@ -295,7 +295,7 @@ installbootloader(){
   echo "pacstrap /mnt ${pkgs}"
   pacstrap /mnt ${pkgs}
   arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=arch_grub
-  sed -i '/GRUB_CMDLINE_LINUX=/c\GRUB_CMDLINE_LINUX="cryptdevice=/dev/sda2:crypt:allow-discards"' /mnt/etc/default/grub
+  sed -i '/GRUB_CMDLINE_LINUX=/c\GRUB_CMDLINE_LINUX="cryptdevice=/dev/nvme0n1p2:crypt:allow-discards"' /mnt/etc/default/grub
   arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
   pressanykey
 }
@@ -396,7 +396,7 @@ configure_hostname(){
 install_yay(){
 	clear
 	git clone https://aur.archlinux.org/yay.git /mnt/tmp
-	arch-chroot /mnt makepkg -si /mnt/tmp/yay
+	arch-chroot /mnt su nobody -s /bin/sh -c "makepkg -si /mnt/tmp/yay"
 	pressanykey
 }
 
