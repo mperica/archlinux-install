@@ -121,7 +121,6 @@ partdisk(){
 				--defaultno --yesno "Disk ${install_disk} will be formated with ${partition_type}\nAll data will be erased !	Continue ?" 0 0
 	if [ "$?" = "0" ];then
 		clear
-	pressanykey
 		setup_$(echo ${partition_type})
 		pressanykey
 	else
@@ -136,11 +135,9 @@ cryptdisk(){
 	cryptsetup -q --type luks1 --cipher aes-xts-plain64 --hash sha512 \
     --use-random --verify-passphrase luksFormat ${install_disk}
   clear
-  echo "Install disk = ${install_disk}"
-  pressanykey
 	echo "Unlock Disk"
 	echo
-	cryptsetup open ${install_disk} crypt
+	cryptsetup open ${install_disk}p2 crypt
 }
 
 setup_lvm(){
@@ -169,7 +166,7 @@ setup_ext4(){
 	setup_lvm
 	### Create filesystems
 	echo "Formating partitions"
-	mkfs.vfat -F32 /dev/sda1
+	mkfs.vfat -F32 /dev/${install_disk}p1
 	mkswap -L SWAP /dev/mapper/lvm-swap
 	mkfs.ext4 /dev/mapper/lvm-root
 	mkfs.ext4 /dev/mapper/lvm-home
@@ -179,7 +176,7 @@ setup_ext4(){
 	mount /dev/mapper/lvm-root /mnt
 	mkdir /mnt/boot
 	mkdir /mnt/home
-	mount /dev/sda1 /mnt/boot
+	mount ${install_disk}p1 /mnt/boot
 	mount /dev/mapper/lvm-home /mnt/home
 	swapon /dev/mapper/lvm-swap
 }
@@ -194,6 +191,7 @@ setup_btrfs(){
 	echo "Creating root partition on ${install_disk}"
   	parted -s ${install_disk} mkpart ROOT btrfs 513M 100%
 	cryptdisk
+	mkfs.vfat -F32 /dev/${install_disk}p1
 	mkfs -t btrfs --force -L ROOT /dev/mapper/crypt
 	# Format
 	mount /dev/mapper/crypt /mnt
@@ -211,12 +209,13 @@ setup_btrfs(){
 	mount -o compress=zstd,subvol=@snapshots,$o_btrfs /dev/mapper/crypt /mnt/.snapshots
 	mount -o compress=zstd,subvol=@home,$o_btrfs /dev/mapper/crypt /mnt/home
 	mkdir -p /mnt/boot
-	mount ${install_disk}1 /mnt/boot
+	mount ${install_disk}p1 /mnt/boot
 	pressanykey
 }
 
 setup_btrfs_root(){
 	setup_lvm
+	mkfs.vfat -F32 /dev/${install_disk}p1
 	mkfs -t btrfs --force -L ROOT /dev/mapper/lvm-root
 	mkfs.ext4 -L HOME /dev/mapper/lvm-home
 	mkswap -L SWAP /dev/mapper/lvm-swap
@@ -235,7 +234,7 @@ setup_btrfs_root(){
 	mkdir -p /mnt/home
 	mount /dev/mapper/lvm-home /mnt/home
 	mkdir -p /mnt/boot
-	mount ${install_disk}1 /mnt/boot
+	mount ${install_disk}p1 /mnt/boot
 	swapon /dev/mapper/lvm-swap
 	pressanykey
 }
