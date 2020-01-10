@@ -64,10 +64,11 @@ selectdisk(){
   if [ "$?" != "0" ];then
     return 1
   fi
+  clear
 	echo ${result}
 	disk=$(echo ${result} | awk '{print $1}')
 	install_disk="${disk}"
-  #${app_name} --msgbox "Selected disk \n${INSTALL_DISK}" 0 0
+	pressanykey
   return 0
 }
 
@@ -133,7 +134,7 @@ cryptdisk(){
 	echo "Crypt Setup"
 	echo
 	cryptsetup -q --type luks1 --cipher aes-xts-plain64 --hash sha512 \
-    --use-random --verify-passphrase luksFormat ${install_disk}
+    --use-random --verify-passphrase luksFormat ${install_disk}p2
   clear
 	echo "Unlock Disk"
 	echo
@@ -166,7 +167,7 @@ setup_ext4(){
 	setup_lvm
 	### Create filesystems
 	echo "Formating partitions"
-	mkfs.vfat -F32 /dev/${install_disk}p1
+	mkfs.vfat -F32 ${install_disk}p1
 	mkswap -L SWAP /dev/mapper/lvm-swap
 	mkfs.ext4 /dev/mapper/lvm-root
 	mkfs.ext4 /dev/mapper/lvm-home
@@ -191,7 +192,7 @@ setup_btrfs(){
 	echo "Creating root partition on ${install_disk}"
   	parted -s ${install_disk} mkpart ROOT btrfs 513M 100%
 	cryptdisk
-	mkfs.vfat -F32 /dev/${install_disk}p1
+	mkfs.vfat -F32 ${install_disk}p1
 	mkfs -t btrfs --force -L ROOT /dev/mapper/crypt
 	# Format
 	mount /dev/mapper/crypt /mnt
@@ -215,7 +216,7 @@ setup_btrfs(){
 
 setup_btrfs_root(){
 	setup_lvm
-	mkfs.vfat -F32 /dev/${install_disk}p1
+	mkfs.vfat -F32 ${install_disk}p1
 	mkfs -t btrfs --force -L ROOT /dev/mapper/lvm-root
 	mkfs.ext4 -L HOME /dev/mapper/lvm-home
 	mkswap -L SWAP /dev/mapper/lvm-swap
