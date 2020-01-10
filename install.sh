@@ -82,8 +82,10 @@ selectpartdisk(){
 	  --title "${select_disk_part}" \
 	  --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3`
   if [ "$?" = "0" ];then
+    clear
     echo "Selected partition type ${select}"
     partition_type=${select}
+    pressanykey
   fi
 }
 
@@ -119,6 +121,15 @@ partdisk(){
 				--defaultno --yesno "Disk ${install_disk} will be formated with ${partition_type}\nAll data will be erased !	Continue ?" 0 0
 	if [ "$?" = "0" ];then
 	  clear
+	clear
+	echo "Creating a new gpt table on ${install_disk}"
+	parted -s ${install_disk} mklabel gpt
+	echo "Creating boot EFI partition on ${install_disk}"
+	parted -s ${install_disk} mkpart ESP fat32 1M 512M
+	parted -s ${install_disk} set 1 boot on
+	echo "Creating root partition on ${install_disk}"
+  parted -s ${install_disk} mkpart LVM 513M 100%
+	pressanykey
 		setup_$(echo ${partition_type})
 		pressanykey
 	else
@@ -131,23 +142,16 @@ cryptdisk(){
 	echo "Crypt Setup"
 	echo
 	cryptsetup -q --type luks1 --cipher aes-xts-plain64 --hash sha512 \
-    --use-random --verify-passphrase luksFormat ${install_disk}2
+    --use-random --verify-passphrase luksFormat ${install_disk}
   clear
+  echo "Install disk = ${install_disk}"
+  pressanykey
 	echo "Unlock Disk"
 	echo
-	cryptsetup open ${install_disk}2 crypt
+	cryptsetup open ${install_disk} crypt
 }
 
 setup_lvm(){
-	clear
-	echo "Creating a new gpt table on ${install_disk}"
-	parted -s ${install_disk} mklabel gpt
-	echo "Creating boot EFI partition on ${install_disk}"
-	parted -s ${install_disk} mkpart ESP fat32 1M 512M
-	parted -s ${install_disk} set 1 boot on
-	echo "Creating root partition on ${install_disk}"
-  parted -s ${install_disk} mkpart LVM 513M 100%
-	pressanykey
 	cryptdisk
 	pressanykey
 	clear
@@ -181,7 +185,9 @@ setup_ext4(){
 }
 
 setup_btrfs(){
+	cryptdisk
 	mkfs -t btrfs --force -L ROOT /dev/mapper/crypt
+	# Format
 	mount /dev/mapper/crypt /mnt
 	btrfs subvolume create /mnt/@
 	btrfs subvolume set-default /mnt/@
